@@ -1,0 +1,14 @@
+# Live data — never commit the user's actual tasks/state (lives in Supabase / on the Mac)
+todo-state.json
+todo-inbox.json
+*.bak-*
+*.bak
+
+# Secrets
+.env
+.env.*
+supabase-credentials*
+
+# OS / editor cruft
+.DS_Store
+*.swp
