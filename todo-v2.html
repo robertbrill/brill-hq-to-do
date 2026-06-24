@@ -806,6 +806,31 @@
   .entry-body:empty::before { content: "Write something\2026"; color: var(--faint); }
   .entry-body a { color: var(--blue); }
   .entry-body ul, .entry-body ol { padding-left: 22px; margin: 4px 0; }
+  /* checklist: a <ul class="checklist"> whose items have a tickable box */
+  .entry-body ul.checklist { list-style: none; padding-left: 2px; }
+  .entry-body ul.checklist li { position: relative; padding-left: 28px; margin: 2px 0; }
+  .entry-body ul.checklist li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 3px;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .entry-body ul.checklist li.checked::before {
+    content: "\2713";
+    color: #fff;
+    background: var(--blue);
+    border-color: var(--blue);
+    font-size: 12px;
+    line-height: 16px;
+    text-align: center;
+  }
+  .entry-body ul.checklist li.checked { color: var(--faint); text-decoration: line-through; }
 
   /* ============ Modal ============ */
   .modal-overlay {
@@ -1787,8 +1812,10 @@ function renderEntryDetail() {
     <div class="entry-toolbar">
       <button class="icon-btn" data-action="fmt" data-cmd="bold"><b>B</b></button>
       <button class="icon-btn" data-action="fmt" data-cmd="italic"><i>I</i></button>
+      <button class="icon-btn" data-action="fmt" data-cmd="strikeThrough"><s>S</s></button>
       <button class="icon-btn" data-action="fmt" data-cmd="insertUnorderedList">&bull; List</button>
       <button class="icon-btn" data-action="fmt" data-cmd="insertOrderedList">1. List</button>
+      <button class="icon-btn" data-action="checklist">&#9745; Check</button>
       <button class="icon-btn" data-action="fmt" data-cmd="removeFormat">Clear</button>
       <div class="controls-spacer"></div>
       <button class="icon-btn danger" data-action="delete-entry">Delete</button>
@@ -2197,6 +2224,21 @@ document.addEventListener("click", e => {
       if (item) { item.body = body.innerHTML; item.updatedAt = new Date().toLocaleString(); queueSave(); }
     }
   }
+  if (a === "checklist") {
+    const body = document.querySelector('[data-role="entry-body"]');
+    if (body) {
+      body.focus();
+      // find the <ul> the caret sits in; make one if there isn't a list yet
+      let ul = enclosingTag("UL");
+      if (!enclosingTag("UL") && !enclosingTag("OL")) {
+        document.execCommand("insertUnorderedList", false, null);
+        ul = enclosingTag("UL");
+      }
+      if (ul) ul.classList.toggle("checklist");  // toggle between bullets and tick-boxes
+      const item = personalItems[selectedEntryIndex];
+      if (item) { item.body = body.innerHTML; item.updatedAt = new Date().toLocaleString(); queueSave(); }
+    }
+  }
 
   if (a === "toggle-props") { detailPropsOpen = !detailPropsOpen; renderProjectDetail(); }
   if (a === "new-project") openNewTaskDialog();
@@ -2251,6 +2293,30 @@ document.addEventListener("mousedown", e => {
 document.addEventListener("click", e => {
   if (!e.target.closest(".menu-wrap")) document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
 });
+
+/* tick / untick a checklist box in a Long Note (clicking the left checkbox zone) */
+document.addEventListener("click", e => {
+  const li = e.target.closest && e.target.closest('[data-role="entry-body"] ul.checklist li');
+  if (!li) return;
+  if (e.clientX - li.getBoundingClientRect().left > 26) return; // only the box zone, not the text
+  li.classList.toggle("checked");
+  const body = li.closest('[data-role="entry-body"]');
+  const item = personalItems[selectedEntryIndex];
+  if (item && body) { item.body = body.innerHTML; item.updatedAt = new Date().toLocaleString(); queueSave(); }
+});
+
+/* find the nearest ancestor of a given tag from the caret, within the note editor */
+function enclosingTag(tag) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  const body = document.querySelector('[data-role="entry-body"]');
+  let node = sel.anchorNode;
+  while (node && node !== body) {
+    if (node.nodeName === tag) return node;
+    node = node.parentNode;
+  }
+  return null;
+}
 
 /* inputs that live inside re-rendered HTML */
 /* Markdown-style: typing "- " or "* " at the start of a line in a Long Note
