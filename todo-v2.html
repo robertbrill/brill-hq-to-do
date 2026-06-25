@@ -992,6 +992,7 @@
     <button class="psb-tab" data-action="status-filter" data-status="Paused">Paused</button>
     <button class="psb-tab" data-action="status-filter" data-status="Done">Done</button>
     <button class="psb-tab" data-action="status-filter" data-status="all">All</button>
+    <button class="psb-tab" data-action="status-filter" data-status="Archived">Archived</button>
   </div>
   <div class="entries-sidebar-list" id="projects-list"></div>
 </aside>
@@ -1000,6 +1001,10 @@
   <div class="entries-sidebar-head">
     <span>Entries <span id="entries-count" style="font-weight:400"></span></span>
     <button class="icon-btn" data-action="new-entry" style="font-weight:600">+ New</button>
+  </div>
+  <div class="psb-filters">
+    <button class="psb-tab" id="notes-active-tab" data-action="toggle-archived-notes" data-show="false">Active</button>
+    <button class="psb-tab" id="notes-archived-tab" data-action="toggle-archived-notes" data-show="true">Archived</button>
   </div>
   <div class="entries-sidebar-list" id="entries-list"></div>
 </aside>
@@ -1131,6 +1136,7 @@ let taskFilter = "active";     // active | completed | all
 let searchQuery = "";
 let projectSearchQuery = "";
 let statusFilter = "Active";
+let showArchivedNotes = false;
 let activeProjectId = null;
 let projectsOverview = localStorage.getItem("v2-projects-overview") === "true";
 let detailPropsOpen = false;
@@ -1203,6 +1209,7 @@ function normalizeProject(p) {
     notes: typeof p.notes === "string" ? p.notes : "",
     personal: Boolean(p.personal),
     ai: Boolean(p.ai),
+    archived: Boolean(p.archived),
     isTemplate: Boolean(p.isTemplate),
     todos: Array.isArray(p.todos) ? p.todos.map(normalizeTodo).filter(Boolean) : []
   };
@@ -1370,7 +1377,7 @@ function renderNav() {
   document.getElementById("nav-tasks-count").textContent = total - done;
   document.getElementById("nav-projects-count").textContent =
     projects.filter(p => !p.isTemplate && (p.status || "Active") === "Active").length;
-  document.getElementById("nav-personal-count").textContent = personalItems.length;
+  document.getElementById("nav-personal-count").textContent = personalItems.filter(i => !i.archived).length;
   document.getElementById("sidebar-stats").textContent = `${total - done} open · ${done} done`;
   document.getElementById("tasks-subtitle").textContent =
     `${total - done} open task${total - done === 1 ? "" : "s"} · ${done} completed`;
@@ -1500,7 +1507,10 @@ function projectStats(p) {
 function visibleProjects() {
   return projects
     .filter(p => !p.isTemplate)
-    .filter(p => statusFilter === "all" || (p.status || "Active") === statusFilter);
+    // Archived projects only appear under the "Archived" tab; every other
+    // view (Active/Paused/Done/All) hides them.
+    .filter(p => statusFilter === "Archived" ? p.archived : !p.archived)
+    .filter(p => statusFilter === "all" || statusFilter === "Archived" || (p.status || "Active") === statusFilter);
 }
 
 function renderProjectsSidebar() {
@@ -1683,6 +1693,7 @@ function renderProjectDetail() {
       <div class="menu-wrap">
         <button class="icon-btn" data-action="toggle-menu" title="More options">&#8943;</button>
         <div class="menu">
+          <button data-action="archive-project" data-id="${escHtml(p.id)}">${p.archived ? "&#8617; Unarchive project" : "&#128230; Archive project"}</button>
           <button class="danger" data-action="start-delete" data-scope="ptodos">Delete to-dos&hellip;</button>
         </div>
       </div>
@@ -1787,12 +1798,18 @@ function formatEntryDate(raw) {
 
 function renderEntriesList() {
   const list = document.getElementById("entries-list");
-  document.getElementById("entries-count").textContent = personalItems.length ? `· ${personalItems.length}` : "";
-  if (!personalItems.length) {
-    list.innerHTML = `<div class="empty-note">No entries yet.</div>`;
+  // keep the real personalItems index on each row so selection still works
+  const shown = personalItems
+    .map((item, i) => ({ item, i }))
+    .filter(({ item }) => Boolean(item.archived) === showArchivedNotes);
+  document.getElementById("entries-count").textContent = shown.length ? `· ${shown.length}` : "";
+  document.getElementById("notes-active-tab").classList.toggle("current", !showArchivedNotes);
+  document.getElementById("notes-archived-tab").classList.toggle("current", showArchivedNotes);
+  if (!shown.length) {
+    list.innerHTML = `<div class="empty-note">${showArchivedNotes ? "No archived notes." : "No entries yet."}</div>`;
     return;
   }
-  list.innerHTML = personalItems.map((item, i) => `
+  list.innerHTML = shown.map(({ item, i }) => `
     <div class="entry-item ${i === selectedEntryIndex ? "selected" : ""}" data-action="select-entry" data-idx="${i}">
       <div class="entry-item-title ${item.title ? "" : "untitled"}">${escHtml(item.title || "Untitled")}</div>
       <div class="entry-item-date">${escHtml(formatEntryDate(item.updatedAt || item.createdAt))}</div>
@@ -1818,13 +1835,21 @@ function renderEntryDetail() {
       <button class="icon-btn" data-action="checklist">&#9745; Check</button>
       <button class="icon-btn" data-action="fmt" data-cmd="removeFormat">Clear</button>
       <div class="controls-spacer"></div>
+      <button class="icon-btn" data-action="archive-entry">${item.archived ? "&#8617; Unarchive" : "&#128230; Archive"}</button>
       <button class="icon-btn danger" data-action="delete-entry">Delete</button>
     </div>
     <div class="entry-body" data-role="entry-body" contenteditable="true">${item.body || ""}</div>`;
 }
 
+// first personalItems index whose archived state matches the current view (or -1)
+function firstVisibleNoteIndex() {
+  return personalItems.findIndex(item => Boolean(item.archived) === showArchivedNotes);
+}
+
 function renderPersonal() {
-  if (selectedEntryIndex >= personalItems.length) selectedEntryIndex = 0;
+  // keep the selection on an entry that belongs to the current (active/archived) view
+  const sel = personalItems[selectedEntryIndex];
+  if (!sel || Boolean(sel.archived) !== showArchivedNotes) selectedEntryIndex = firstVisibleNoteIndex();
   renderEntriesList();
   renderEntryDetail();
 }
@@ -1848,6 +1873,19 @@ function deleteEntry() {
   renderPersonal();
   renderNav();
   showToast("Entry deleted");
+}
+
+function archiveEntry() {
+  const item = personalItems[selectedEntryIndex];
+  if (!item) return;
+  item.archived = !item.archived;
+  item.updatedAt = new Date().toLocaleString();
+  queueSave();
+  showToast(item.archived ? "Note archived" : "Note unarchived");
+  // the note just left the current view; move selection to a visible one
+  selectedEntryIndex = firstVisibleNoteIndex();
+  renderPersonal();
+  renderNav();
 }
 
 /* ---------- render dispatcher ---------- */
@@ -1958,7 +1996,7 @@ function openPicker(key) {
   const text = edits[key] || (section ? section.items[Number(idxStr)] : "") || "";
   document.getElementById("picker-sub").textContent = text.slice(0, 80);
 
-  const choices = projects.filter(p => !p.isTemplate && (p.status || "Active") !== "Done");
+  const choices = projects.filter(p => !p.isTemplate && !p.archived && (p.status || "Active") !== "Done");
   document.getElementById("picker-list").innerHTML = choices.length
     ? choices.map(p => `<button class="modal-option" data-action="picker-choose" data-id="${escHtml(p.id)}">
         <span>&#128193;</span> ${escHtml(p.name || "Untitled")}
@@ -2022,7 +2060,7 @@ function newProject() {
 function openNewTaskDialog() {
   const sel = document.getElementById("newtask-project");
   const order = { Active: 0, Paused: 1, Done: 2 };
-  const pool = projects.filter(p => !p.isTemplate)
+  const pool = projects.filter(p => !p.isTemplate && !p.archived)
     .slice()
     .sort((a, b) => (order[a.status || "Active"] ?? 3) - (order[b.status || "Active"] ?? 3));
   sel.innerHTML = pool.map(p =>
@@ -2078,6 +2116,23 @@ function deleteProject(id) {
   queueSave();
   setView("projects");
   showToast(`Deleted ${label}`);
+}
+
+function archiveProject(id) {
+  const p = findProject(id);
+  if (!p) return;
+  p.archived = !p.archived;
+  touchProject(p);
+  queueSave();
+  if (p.archived) {
+    // archived projects leave the normal view — drop to the overview grid
+    setOverview(true);
+    setView("projects");
+    showToast(`Archived ${p.name || "Untitled"}`);
+  } else {
+    render();
+    showToast(`Unarchived ${p.name || "Untitled"}`);
+  }
 }
 
 function addProjectTodo() {
@@ -2190,6 +2245,10 @@ document.addEventListener("click", e => {
     document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
     startDeleteMode(el.dataset.scope);
   }
+  if (a === "archive-project") {
+    document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    archiveProject(el.dataset.id);
+  }
   if (a === "toggle-select") {
     const k = el.dataset.key || el.dataset.id;
     if (deleteSelection.has(k)) deleteSelection.delete(k);
@@ -2212,6 +2271,12 @@ document.addEventListener("click", e => {
 
   if (a === "new-entry") newEntry();
   if (a === "delete-entry") deleteEntry();
+  if (a === "archive-entry") archiveEntry();
+  if (a === "toggle-archived-notes") {
+    showArchivedNotes = el.dataset.show === "true";
+    selectedEntryIndex = firstVisibleNoteIndex();
+    renderPersonal();
+  }
   if (a === "select-entry") {
     const idx = Number(el.dataset.idx);
     if (idx !== selectedEntryIndex) { selectedEntryIndex = idx; renderPersonal(); }
