@@ -104,9 +104,15 @@
   .note-groups-nav { display: none; flex-direction: column; gap: 1px; margin: 1px 0 4px; }
   .note-groups-nav.show { display: flex; }
   .note-groups-nav .ng-label {
-    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
-    color: var(--faint); padding: 8px 10px 3px;
+    display: flex; align-items: center; gap: 5px;
+    width: 100%; border: none; background: transparent; text-align: left;
+    font: inherit; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--faint); padding: 8px 10px 3px; cursor: pointer;
   }
+  .note-groups-nav .ng-label:hover { color: var(--muted); }
+  .note-groups-nav .ngl-caret { font-size: 8px; transition: transform 0.12s; display: inline-block; }
+  .note-groups-nav.collapsed .ngl-caret { transform: rotate(-90deg); }
+  .note-groups-nav.collapsed .nav-subitem { display: none; }
   .nav-subitem {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     width: 100%; text-align: left; border: none; background: transparent;
@@ -973,6 +979,8 @@
     /* group nav becomes a scrollable chip row on its own line below the top nav */
     .note-groups-nav.show { flex-basis: 100%; flex-direction: row; overflow-x: auto; gap: 6px; margin: 4px 0 0; padding-bottom: 2px; }
     .note-groups-nav .ng-label { display: none; }
+    /* collapse is a desktop affordance (no header on mobile) — keep chips visible */
+    .note-groups-nav.collapsed .nav-subitem { display: flex; }
     .nav-subitem { width: auto; padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: 14px; white-space: nowrap; }
     .main { height: auto; }
     .page { padding: 24px 16px 90px; }
@@ -1190,6 +1198,9 @@ let dirty = false;
 
 let collapsedSections = new Set();
 try { collapsedSections = new Set(JSON.parse(localStorage.getItem(UI_COLLAPSED_KEY)) || []); } catch (e) {}
+
+const UI_GROUPS_NAV_KEY = "v2-groups-nav-collapsed";
+let noteGroupsNavCollapsed = localStorage.getItem(UI_GROUPS_NAV_KEY) === "true";
 
 
 /* ---------- helpers ---------- */
@@ -1923,9 +1934,10 @@ function renderNoteGroupsNav() {
     if (g) counts[g] = (counts[g] || 0) + 1; else ungrouped++;
   });
   const names = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+  nav.classList.toggle("collapsed", noteGroupsNavCollapsed);
   const sub = (key, label, count) =>
     `<button class="nav-subitem ${selectedNoteGroup === key ? "current" : ""}" data-action="select-note-group" data-group="${escHtml(key)}">${escHtml(label)} <span class="nav-subcount">${count}</span></button>`;
-  let html = `<div class="ng-label">${showArchivedNotes ? "Archived groups" : "Groups"}</div>`;
+  let html = `<button class="ng-label" data-action="toggle-groups-nav"><span class="ngl-caret">&#9662;</span>${showArchivedNotes ? "Archived groups" : "Groups"}</button>`;
   html += sub("__all__", "All notes", pool.length);
   html += names.map(g => sub(g, g, counts[g])).join("");
   if (ungrouped) html += sub("__ungrouped__", "Ungrouped", ungrouped);
@@ -2372,6 +2384,11 @@ document.addEventListener("click", e => {
     selectedNoteGroup = el.dataset.group;
     selectedEntryIndex = firstVisibleNoteIndex();
     renderPersonal();
+  }
+  if (a === "toggle-groups-nav") {
+    noteGroupsNavCollapsed = !noteGroupsNavCollapsed;
+    try { localStorage.setItem(UI_GROUPS_NAV_KEY, noteGroupsNavCollapsed ? "true" : "false"); } catch (err) {}
+    renderNoteGroupsNav();
   }
   if (a === "select-entry") {
     const idx = Number(el.dataset.idx);
