@@ -1835,8 +1835,13 @@ function renderEntryDetail() {
       <button class="icon-btn" data-action="checklist">&#9745; Check</button>
       <button class="icon-btn" data-action="fmt" data-cmd="removeFormat">Clear</button>
       <div class="controls-spacer"></div>
-      <button class="icon-btn" data-action="archive-entry">${item.archived ? "&#8617; Unarchive" : "&#128230; Archive"}</button>
-      <button class="icon-btn danger" data-action="delete-entry">Delete</button>
+      <div class="menu-wrap">
+        <button class="icon-btn" data-action="toggle-menu" title="More options">&#8943;</button>
+        <div class="menu">
+          <button data-action="archive-entry">${item.archived ? "&#8617; Unarchive" : "&#128230; Archive"}</button>
+          <button class="danger" data-action="delete-entry">Delete&hellip;</button>
+        </div>
+      </div>
     </div>
     <div class="entry-body" data-role="entry-body" contenteditable="true">${item.body || ""}</div>`;
 }
