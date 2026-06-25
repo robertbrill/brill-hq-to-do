@@ -100,6 +100,22 @@
     color: var(--faint);
     border-top: 1px solid var(--border);
   }
+  /* Long Notes group navigation, shown in the left sidebar under "Long Notes" */
+  .note-groups-nav { display: none; flex-direction: column; gap: 1px; margin: 1px 0 4px; }
+  .note-groups-nav.show { display: flex; }
+  .note-groups-nav .ng-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--faint); padding: 8px 10px 3px;
+  }
+  .nav-subitem {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; text-align: left; border: none; background: transparent;
+    font: inherit; font-size: 13px; color: var(--muted);
+    padding: 5px 10px 5px 32px; border-radius: var(--radius); cursor: pointer;
+  }
+  .nav-subitem:hover { background: var(--hover); }
+  .nav-subitem.current { background: var(--active); color: var(--text); font-weight: 600; }
+  .nav-subitem .nav-subcount { font-size: 11px; color: var(--faint); font-weight: 400; }
 
   /* ============ Main ============ */
   .main {
@@ -256,10 +272,6 @@
     transition: transform 0.12s;
   }
   .section.collapsed .section-caret { transform: rotate(-90deg); }
-  .note-group { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-  .note-group:hover { color: var(--muted); }
-  .note-group .ng-caret { font-size: 9px; transition: transform 0.12s; display: inline-block; }
-  .note-group.collapsed .ng-caret { transform: rotate(-90deg); }
   .section-dot { width: 8px; height: 8px; border-radius: 50%; }
   .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
   .section-count { font-size: 12px; color: var(--faint); }
@@ -945,6 +957,7 @@
       height: auto;
       position: static;
       flex-direction: row;
+      flex-wrap: wrap;
       align-items: center;
       padding: 8px 12px;
       border-right: none;
@@ -957,6 +970,10 @@
     .nav-item { width: auto; }
     .nav-item .nav-count { display: none; }
     .sidebar-footer { display: none; }
+    /* group nav becomes a scrollable chip row on its own line below the top nav */
+    .note-groups-nav.show { flex-basis: 100%; flex-direction: row; overflow-x: auto; gap: 6px; margin: 4px 0 0; padding-bottom: 2px; }
+    .note-groups-nav .ng-label { display: none; }
+    .nav-subitem { width: auto; padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: 14px; white-space: nowrap; }
     .main { height: auto; }
     .page { padding: 24px 16px 90px; }
     .page-title { font-size: 28px; }
@@ -997,6 +1014,7 @@
   <button class="nav-item" id="nav-personal" data-action="nav" data-view="personal">
     <span class="nav-icon">&#128221;</span> Long Notes <span class="nav-count" id="nav-personal-count"></span>
   </button>
+  <div class="note-groups-nav" id="note-groups-nav"></div>
   <div class="sidebar-footer" id="sidebar-stats"></div>
 </aside>
 
@@ -1155,6 +1173,7 @@ let searchQuery = "";
 let projectSearchQuery = "";
 let statusFilter = "Active";
 let showArchivedNotes = false;
+let selectedNoteGroup = "__all__";   // which Long Notes group is selected in the left sidebar
 let activeProjectId = null;
 let projectsOverview = localStorage.getItem("v2-projects-overview") === "true";
 let detailPropsOpen = false;
@@ -1172,9 +1191,6 @@ let dirty = false;
 let collapsedSections = new Set();
 try { collapsedSections = new Set(JSON.parse(localStorage.getItem(UI_COLLAPSED_KEY)) || []); } catch (e) {}
 
-const UI_NOTE_GROUPS_KEY = "v2-collapsed-note-groups";
-let collapsedNoteGroups = new Set();
-try { collapsedNoteGroups = new Set(JSON.parse(localStorage.getItem(UI_NOTE_GROUPS_KEY)) || []); } catch (e) {}
 
 /* ---------- helpers ---------- */
 
@@ -1400,6 +1416,7 @@ function renderNav() {
   document.getElementById("nav-projects-count").textContent =
     projects.filter(p => !p.isTemplate && (p.status || "Active") === "Active").length;
   document.getElementById("nav-personal-count").textContent = personalItems.filter(i => !i.archived).length;
+  renderNoteGroupsNav();   // show the group list under Long Notes (hidden in other views)
   document.getElementById("sidebar-stats").textContent = `${total - done} open · ${done} done`;
   document.getElementById("tasks-subtitle").textContent =
     `${total - done} open task${total - done === 1 ? "" : "s"} · ${done} completed`;
@@ -1820,45 +1837,22 @@ function formatEntryDate(raw) {
 
 function renderEntriesList() {
   const list = document.getElementById("entries-list");
-  // keep the real personalItems index on each row so selection still works
+  // flat list of the selected group within the current Active/Archived tab
   const shown = personalItems
     .map((item, i) => ({ item, i }))
-    .filter(({ item }) => Boolean(item.archived) === showArchivedNotes);
+    .filter(({ item }) => noteMatchesView(item));
   document.getElementById("entries-count").textContent = shown.length ? `· ${shown.length}` : "";
   document.getElementById("notes-active-tab").classList.toggle("current", !showArchivedNotes);
   document.getElementById("notes-archived-tab").classList.toggle("current", showArchivedNotes);
   if (!shown.length) {
-    list.innerHTML = `<div class="empty-note">${showArchivedNotes ? "No archived notes." : "No entries yet."}</div>`;
+    list.innerHTML = `<div class="empty-note">${showArchivedNotes ? "No archived notes here." : "No notes here yet."}</div>`;
     return;
   }
-  const itemRow = ({ item, i }) => `
+  list.innerHTML = shown.map(({ item, i }) => `
     <div class="entry-item ${i === selectedEntryIndex ? "selected" : ""}" data-action="select-entry" data-idx="${i}">
       <div class="entry-item-title ${item.title ? "" : "untitled"}">${escHtml(item.title || "Untitled")}</div>
       <div class="entry-item-date">${escHtml(formatEntryDate(item.updatedAt || item.createdAt))}</div>
-    </div>`;
-
-  // If nothing is grouped, keep the simple flat list.
-  if (!shown.some(({ item }) => (item.group || "").trim())) {
-    list.innerHTML = shown.map(itemRow).join("");
-    return;
-  }
-
-  // Otherwise group by heading, in first-seen order, with ungrouped notes last.
-  const order = [];
-  const byGroup = {};
-  shown.forEach(row => {
-    const g = (row.item.group || "").trim();
-    const key = g || "__ungrouped__";
-    if (!byGroup[key]) { byGroup[key] = []; order.push(key); }
-    byGroup[key].push(row);
-  });
-  order.sort((a, b) => (a === "__ungrouped__") - (b === "__ungrouped__")); // ungrouped to the bottom
-  list.innerHTML = order.map(key => {
-    const title = key === "__ungrouped__" ? "Ungrouped" : key;
-    const collapsed = collapsedNoteGroups.has(key);
-    const header = `<div class="psb-group note-group ${collapsed ? "collapsed" : ""}" data-action="toggle-note-group" data-group="${escHtml(key)}"><span class="ng-caret">&#9662;</span>${escHtml(title)} <span style="opacity:.55;font-weight:500">${byGroup[key].length}</span></div>`;
-    return header + (collapsed ? "" : byGroup[key].map(itemRow).join(""));
-  }).join("");
+    </div>`).join("");
 }
 
 function renderEntryDetail() {
@@ -1904,19 +1898,53 @@ function noteGroups() {
 }
 
 // first personalItems index whose archived state matches the current view (or -1)
+// does a note belong to the current view (archived tab + selected group)?
+function noteMatchesView(item) {
+  if (Boolean(item.archived) !== showArchivedNotes) return false;
+  if (selectedNoteGroup === "__all__") return true;
+  if (selectedNoteGroup === "__ungrouped__") return !(item.group || "").trim();
+  return (item.group || "").trim() === selectedNoteGroup;
+}
+
 function firstVisibleNoteIndex() {
-  return personalItems.findIndex(item => Boolean(item.archived) === showArchivedNotes);
+  return personalItems.findIndex(noteMatchesView);
+}
+
+// left-sidebar group navigation for Long Notes
+function renderNoteGroupsNav() {
+  const nav = document.getElementById("note-groups-nav");
+  if (view !== "personal") { nav.classList.remove("show"); nav.innerHTML = ""; return; }
+  nav.classList.add("show");
+  const pool = personalItems.filter(i => Boolean(i.archived) === showArchivedNotes);
+  const counts = {};
+  let ungrouped = 0;
+  pool.forEach(i => {
+    const g = (i.group || "").trim();
+    if (g) counts[g] = (counts[g] || 0) + 1; else ungrouped++;
+  });
+  const names = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+  const sub = (key, label, count) =>
+    `<button class="nav-subitem ${selectedNoteGroup === key ? "current" : ""}" data-action="select-note-group" data-group="${escHtml(key)}">${escHtml(label)} <span class="nav-subcount">${count}</span></button>`;
+  let html = `<div class="ng-label">${showArchivedNotes ? "Archived groups" : "Groups"}</div>`;
+  html += sub("__all__", "All notes", pool.length);
+  html += names.map(g => sub(g, g, counts[g])).join("");
+  if (ungrouped) html += sub("__ungrouped__", "Ungrouped", ungrouped);
+  nav.innerHTML = html;
 }
 
 function renderPersonal() {
-  // keep the selection on an entry that belongs to the current (active/archived) view
+  renderNoteGroupsNav();
+  // keep the selection on an entry that belongs to the current view (tab + group)
   const sel = personalItems[selectedEntryIndex];
-  if (!sel || Boolean(sel.archived) !== showArchivedNotes) selectedEntryIndex = firstVisibleNoteIndex();
+  if (!sel || !noteMatchesView(sel)) selectedEntryIndex = firstVisibleNoteIndex();
   renderEntriesList();
   renderEntryDetail();
 }
 
 function newEntry() {
+  // make sure the new (ungrouped, active) note is visible in whatever view we're in
+  showArchivedNotes = false;
+  selectedNoteGroup = "__all__";
   personalItems.unshift({ title: "", body: "", createdAt: new Date().toLocaleString() });
   selectedEntryIndex = 0;
   queueSave();
@@ -2336,15 +2364,14 @@ document.addEventListener("click", e => {
   if (a === "archive-entry") archiveEntry();
   if (a === "toggle-archived-notes") {
     showArchivedNotes = el.dataset.show === "true";
+    selectedNoteGroup = "__all__";   // group lists differ between active/archived
     selectedEntryIndex = firstVisibleNoteIndex();
     renderPersonal();
   }
-  if (a === "toggle-note-group") {
-    const g = el.dataset.group;
-    if (collapsedNoteGroups.has(g)) collapsedNoteGroups.delete(g);
-    else collapsedNoteGroups.add(g);
-    try { localStorage.setItem(UI_NOTE_GROUPS_KEY, JSON.stringify([...collapsedNoteGroups])); } catch (err) {}
-    renderEntriesList();
+  if (a === "select-note-group") {
+    selectedNoteGroup = el.dataset.group;
+    selectedEntryIndex = firstVisibleNoteIndex();
+    renderPersonal();
   }
   if (a === "select-entry") {
     const idx = Number(el.dataset.idx);
@@ -2541,7 +2568,7 @@ document.addEventListener("change", e => {
   const el = e.target;
   if (el.dataset.role === "entry-group") {
     const item = personalItems[selectedEntryIndex];
-    if (item) { item.group = el.value.trim(); queueSave(); renderEntriesList(); }
+    if (item) { item.group = el.value.trim(); queueSave(); renderNoteGroupsNav(); renderEntriesList(); }
   }
   if (el.id === "newtask-project") {
     const isNew = el.value === "__new__";
