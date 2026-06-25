@@ -1436,6 +1436,7 @@ function renderNav() {
 function setView(next) {
   deleteMode = null;
   deleteSelection = new Set();
+  if (next === "personal") selectedNoteGroup = "__all__";  // entering Long Notes defaults to All
   view = next === "detail" ? "projects" : next;
   document.getElementById("page-tasks").classList.toggle("visible", view === "tasks");
   document.getElementById("page-personal").classList.toggle("visible", view === "personal");
