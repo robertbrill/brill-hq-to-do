@@ -256,6 +256,10 @@
     transition: transform 0.12s;
   }
   .section.collapsed .section-caret { transform: rotate(-90deg); }
+  .note-group { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .note-group:hover { color: var(--muted); }
+  .note-group .ng-caret { font-size: 9px; transition: transform 0.12s; display: inline-block; }
+  .note-group.collapsed .ng-caret { transform: rotate(-90deg); }
   .section-dot { width: 8px; height: 8px; border-radius: 50%; }
   .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
   .section-count { font-size: 12px; color: var(--faint); }
@@ -1168,6 +1172,10 @@ let dirty = false;
 let collapsedSections = new Set();
 try { collapsedSections = new Set(JSON.parse(localStorage.getItem(UI_COLLAPSED_KEY)) || []); } catch (e) {}
 
+const UI_NOTE_GROUPS_KEY = "v2-collapsed-note-groups";
+let collapsedNoteGroups = new Set();
+try { collapsedNoteGroups = new Set(JSON.parse(localStorage.getItem(UI_NOTE_GROUPS_KEY)) || []); } catch (e) {}
+
 /* ---------- helpers ---------- */
 
 function escHtml(s) {
@@ -1840,14 +1848,16 @@ function renderEntriesList() {
   const byGroup = {};
   shown.forEach(row => {
     const g = (row.item.group || "").trim();
-    const key = g || " ungrouped";
+    const key = g || "__ungrouped__";
     if (!byGroup[key]) { byGroup[key] = []; order.push(key); }
     byGroup[key].push(row);
   });
-  order.sort((a, b) => (a === " ungrouped") - (b === " ungrouped")); // ungrouped to the bottom
+  order.sort((a, b) => (a === "__ungrouped__") - (b === "__ungrouped__")); // ungrouped to the bottom
   list.innerHTML = order.map(key => {
-    const title = key === " ungrouped" ? "Ungrouped" : key;
-    return `<div class="psb-group">${escHtml(title)}</div>${byGroup[key].map(itemRow).join("")}`;
+    const title = key === "__ungrouped__" ? "Ungrouped" : key;
+    const collapsed = collapsedNoteGroups.has(key);
+    const header = `<div class="psb-group note-group ${collapsed ? "collapsed" : ""}" data-action="toggle-note-group" data-group="${escHtml(key)}"><span class="ng-caret">&#9662;</span>${escHtml(title)} <span style="opacity:.55;font-weight:500">${byGroup[key].length}</span></div>`;
+    return header + (collapsed ? "" : byGroup[key].map(itemRow).join(""));
   }).join("");
 }
 
@@ -2328,6 +2338,13 @@ document.addEventListener("click", e => {
     showArchivedNotes = el.dataset.show === "true";
     selectedEntryIndex = firstVisibleNoteIndex();
     renderPersonal();
+  }
+  if (a === "toggle-note-group") {
+    const g = el.dataset.group;
+    if (collapsedNoteGroups.has(g)) collapsedNoteGroups.delete(g);
+    else collapsedNoteGroups.add(g);
+    try { localStorage.setItem(UI_NOTE_GROUPS_KEY, JSON.stringify([...collapsedNoteGroups])); } catch (err) {}
+    renderEntriesList();
   }
   if (a === "select-entry") {
     const idx = Number(el.dataset.idx);
