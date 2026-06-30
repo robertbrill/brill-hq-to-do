@@ -137,14 +137,14 @@
     display: none;
   }
   .page.visible { display: block; }
-  #page-project-detail { position: relative; }
+  #page-project-detail, #page-personal { position: relative; }
   .drop-overlay {
     position: absolute; inset: 0; z-index: 40;
     display: none; align-items: center; justify-content: center; text-align: center;
     background: var(--blue-soft); border: 2px dashed var(--blue); border-radius: 12px;
     color: var(--blue); font-size: 18px; font-weight: 600; pointer-events: none; padding: 20px;
   }
-  #page-project-detail.drag-over .drop-overlay { display: flex; }
+  .page.drag-over > .drop-overlay { display: flex; }
 
   .page-title {
     font-size: 36px;
@@ -1146,6 +1146,7 @@
 
   <!-- ============ PERSONAL ============ -->
   <div class="page" id="page-personal">
+    <div class="drop-overlay">&#128206; Drop files to attach to this note</div>
     <div id="entry-detail"></div>
   </div>
 
@@ -1273,11 +1274,20 @@ let noteGroupsNavCollapsed = localStorage.getItem(UI_GROUPS_NAV_KEY) === "true";
 /* ---------- helpers ---------- */
 
 function escHtml(s) {
-  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function uid(prefix) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// deterministic id for legacy notes that predate stable ids, so every device/tab
+// computes the SAME id and files never orphan (uid() would diverge across clients)
+function legacyNoteId(note) {
+  const seed = (note.createdAt || "") + "|" + (note.title || "") + "|" + (note.body || "").slice(0, 80);
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) | 0; }
+  return "n_lg" + (h >>> 0).toString(36);
 }
 
 function taskKey(sectionId, idx) {
@@ -1969,7 +1979,10 @@ function renderEntryDetail() {
         </div>
       </div>
     </div>
-    <div class="entry-body" data-role="entry-body" contenteditable="true">${item.body || ""}</div>`;
+    <div class="entry-body" data-role="entry-body" contenteditable="true">${item.body || ""}</div>
+    <hr class="divider">
+    <div class="project-files" id="note-files"></div>`;
+  renderNoteFilesSection();
 }
 
 // distinct group headings across all notes, for the group-picker autocomplete
@@ -2031,7 +2044,7 @@ function newEntry() {
   // make sure the new (ungrouped, active) note is visible in whatever view we're in
   showArchivedNotes = false;
   selectedNoteGroup = "__all__";
-  personalItems.unshift({ title: "", body: "", createdAt: new Date().toLocaleString() });
+  personalItems.unshift({ id: uid("n"), title: "", body: "", createdAt: new Date().toLocaleString() });
   selectedEntryIndex = 0;
   queueSave();
   renderPersonal();
@@ -2039,10 +2052,19 @@ function newEntry() {
   document.querySelector('[data-role="entry-title"]')?.focus();
 }
 
+// remove every uploaded file attached to a deleted note/project so they don't orphan
+function deleteFilesFor(owner) {
+  fetch("/api/delete-files-for", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(owner)
+  }).then(() => refreshFilesCount()).catch(() => {});
+}
+
 function deleteEntry() {
   const item = personalItems[selectedEntryIndex];
   if (!item) return;
   if (!confirm(`Delete "${item.title || "Untitled"}"? This can't be undone.`)) return;
+  if (item.id) { deleteFilesFor({ noteId: item.id }); delete noteFilesById[item.id]; }
   personalItems.splice(selectedEntryIndex, 1);
   selectedEntryIndex = 0;
   queueSave();
@@ -2096,7 +2118,9 @@ function readFileAsBase64(file) {
   });
 }
 
-async function uploadFiles(fileList, project) {
+// owner is extra payload fields identifying what the file attaches to:
+//   {projectId, projectName}  or  {noteId, noteTitle}
+async function uploadFiles(fileList, owner) {
   let ok = 0;
   for (const file of Array.from(fileList)) {
     try {
@@ -2104,12 +2128,7 @@ async function uploadFiles(fileList, project) {
       const res = await fetch("/api/upload-file", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: file.name, mime: file.type,
-          projectId: project ? project.id : "",
-          projectName: project ? (project.name || "Untitled") : "",
-          dataBase64
-        })
+        body: JSON.stringify(Object.assign({ name: file.name, mime: file.type, dataBase64 }, owner || {}))
       });
       if (res.ok) ok++;
       else { const e = await res.json().catch(() => ({})); showToast(e.error || "Upload failed"); }
@@ -2118,6 +2137,9 @@ async function uploadFiles(fileList, project) {
   if (ok) showToast(`Uploaded ${ok} file${ok === 1 ? "" : "s"}`);
   return ok;
 }
+
+function ownerForProject(p) { return { projectId: p ? p.id : "", projectName: p ? (p.name || "Untitled") : "" }; }
+function ownerForNote(n) { return { noteId: n ? n.id : "", noteTitle: n ? (n.title || "Untitled") : "" }; }
 
 async function deleteFile(id) {
   if (!confirm("Delete this file? This can't be undone.")) return false;
@@ -2177,6 +2199,47 @@ async function fetchProjectFiles(pid) {
   if (activeProjectId === pid && view === "projects") renderProjectFilesSection();
 }
 
+/* --- per-note files section (inside the Long Notes editor) --- */
+
+let noteFilesById = {};   // noteId -> array of file records (cache)
+
+function noteFilesSectionHtml(nid) {
+  const files = noteFilesById[nid];
+  const rows = files === undefined
+    ? `<div class="card-empty">Loading files&hellip;</div>`
+    : (files.length
+        ? files.map(f => `
+          <div class="file-row">
+            ${fileExtBadge(f)}
+            <a class="file-name" href="${escHtml(f.url)}" target="_blank" rel="noopener" download="${escHtml(f.name)}">${escHtml(f.name)}</a>
+            <span class="file-meta">${fmtBytes(f.size)} &middot; ${fmtStamp(f.uploadedAt)}</span>
+            <button class="icon-btn danger" data-action="delete-file" data-id="${escHtml(f.id)}" data-scope="note">Delete</button>
+          </div>`).join("")
+        : `<div class="card-empty">No files attached yet.</div>`);
+  return `<div class="files-head">
+      <span>&#128206; Files</span>
+      <label class="file-upload-btn">+ Upload<input type="file" multiple data-role="note-file-input" hidden></label>
+    </div>${rows}`;
+}
+
+function renderNoteFilesSection() {
+  const box = document.getElementById("note-files");
+  if (!box) return;
+  const item = personalItems[selectedEntryIndex];
+  if (!item || !item.id) { box.innerHTML = ""; return; }
+  box.innerHTML = noteFilesSectionHtml(item.id);
+  if (noteFilesById[item.id] === undefined) fetchNoteFiles(item.id);
+}
+
+async function fetchNoteFiles(nid) {
+  try {
+    const res = await fetch("/api/files?note=" + encodeURIComponent(nid));
+    noteFilesById[nid] = res.ok ? await res.json() : [];
+  } catch (e) { noteFilesById[nid] = []; }
+  const cur = personalItems[selectedEntryIndex];
+  if (view === "personal" && cur && cur.id === nid) renderNoteFilesSection();
+}
+
 /* --- aggregate Files view --- */
 
 async function renderFilesView() {
@@ -2191,17 +2254,22 @@ async function renderFilesView() {
   document.getElementById("files-subtitle").textContent =
     `${files.length} file${files.length === 1 ? "" : "s"}${q ? " matching “" + q + "”" : ""}`;
   if (!files.length) {
-    table.innerHTML = `<div class="empty-note">${q ? "No files match your search." : "No files yet. Upload files from a project."}</div>`;
+    table.innerHTML = `<div class="empty-note">${q ? "No files match your search." : "No files yet. Upload files from a project or note."}</div>`;
     return;
   }
+  const ownerCell = f => {
+    if (f.projectId) return `<button class="link-btn" data-action="open-project" data-id="${escHtml(f.projectId)}">&#128193; ${escHtml(f.projectName || "Project")}</button>`;
+    if (f.noteId) return `<button class="link-btn" data-action="open-note" data-id="${escHtml(f.noteId)}">&#128221; ${escHtml(f.noteTitle || "Note")}</button>`;
+    return "<span class='file-meta'>&mdash;</span>";
+  };
   table.innerHTML = `
     <div class="file-row file-row-head">
-      <span></span><span>Name</span><span>Project</span><span>Uploaded</span><span>Size</span><span></span>
+      <span></span><span>Name</span><span>Attached to</span><span>Uploaded</span><span>Size</span><span></span>
     </div>` + files.map(f => `
     <div class="file-row file-row-grid">
       ${fileExtBadge(f)}
       <a class="file-name" href="${escHtml(f.url)}" target="_blank" rel="noopener" download="${escHtml(f.name)}">${escHtml(f.name)}</a>
-      <span class="file-proj">${f.projectName ? `<button class="link-btn" data-action="open-project" data-id="${escHtml(f.projectId)}">${escHtml(f.projectName)}</button>` : "<span class='file-meta'>&mdash;</span>"}</span>
+      <span class="file-proj">${ownerCell(f)}</span>
       <span class="file-meta">${fmtStamp(f.uploadedAt)}</span>
       <span class="file-meta">${fmtBytes(f.size)}</span>
       <button class="icon-btn danger" data-action="delete-file" data-id="${escHtml(f.id)}" data-scope="files">Delete</button>
@@ -2432,6 +2500,8 @@ function deleteProject(id) {
   if (!p) return;
   const label = p.name || "Untitled";
   if (!confirm(`Delete "${label}" and its ${p.todos.length} to-do(s)? This can't be undone.`)) return;
+  deleteFilesFor({ projectId: String(id) });
+  delete projectFilesById[id];
   projects = projects.filter(x => String(x.id) !== String(id));
   activeProjectId = null;
   queueSave();
@@ -2641,12 +2711,26 @@ document.addEventListener("click", e => {
   if (a === "new-project") openNewTaskDialog();
   if (a === "newtask-cancel") closeNewTaskDialog();
   if (a === "open-project") { setOverview(false); activeProjectId = el.dataset.id; setView("projects"); }
+  if (a === "open-note") {
+    const idx = personalItems.findIndex(n => n && n.id === el.dataset.id);
+    if (idx >= 0) {
+      showArchivedNotes = !!personalItems[idx].archived;
+      selectedNoteGroup = "__all__";
+      selectedEntryIndex = idx;
+      setView("personal");
+    } else { showToast("Note not found"); }
+  }
   if (a === "delete-file") {
     const id = el.dataset.id, scope = el.dataset.scope;
     deleteFile(id).then(ok => {
       if (!ok) return;
       refreshFilesCount();
       if (scope === "project") { projectFilesById[activeProjectId] = undefined; renderProjectFilesSection(); }
+      else if (scope === "note") {
+        const item = personalItems[selectedEntryIndex];
+        if (item) noteFilesById[item.id] = undefined;
+        renderNoteFilesSection();
+      }
       else renderFilesView();
     });
   }
@@ -2816,11 +2900,24 @@ document.addEventListener("change", e => {
     const p = findProject(activeProjectId);
     const files = el.files;
     el.value = "";
-    uploadFiles(files, p).then(() => {
+    uploadFiles(files, ownerForProject(p)).then(() => {
       projectFilesById[activeProjectId] = undefined;
       renderProjectFilesSection();
       refreshFilesCount();
     });
+  }
+  if (el.dataset.role === "note-file-input") {
+    const item = personalItems[selectedEntryIndex];
+    const files = el.files;
+    el.value = "";
+    if (item) {
+      if (!item.id) { item.id = uid("n"); queueSave(); }
+      uploadFiles(files, ownerForNote(item)).then(() => {
+        noteFilesById[item.id] = undefined;
+        renderNoteFilesSection();
+        refreshFilesCount();
+      });
+    }
   }
   if (el.dataset.role === "entry-group") {
     const item = personalItems[selectedEntryIndex];
@@ -2915,9 +3012,43 @@ function projectDropActive() {
     const files = e.dataTransfer && e.dataTransfer.files;
     if (!files || !files.length) return;
     const p = findProject(activeProjectId);
-    uploadFiles(files, p).then(() => {
+    uploadFiles(files, ownerForProject(p)).then(() => {
       projectFilesById[activeProjectId] = undefined;
       renderProjectFilesSection();
+      refreshFilesCount();
+    });
+  });
+})();
+
+function noteDropActive() {
+  const item = personalItems[selectedEntryIndex];
+  return view === "personal" && item && item.id;
+}
+(function setupNoteDrop() {
+  const np = document.getElementById("page-personal");
+  let depth = 0;
+  np.addEventListener("dragenter", e => {
+    if (!noteDropActive() || !dragHasFiles(e)) return;
+    e.preventDefault(); depth++; np.classList.add("drag-over");
+  });
+  np.addEventListener("dragover", e => {
+    if (!noteDropActive() || !dragHasFiles(e)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = "copy";
+  });
+  np.addEventListener("dragleave", e => {
+    if (!noteDropActive()) return;
+    depth = Math.max(0, depth - 1);
+    if (!depth) np.classList.remove("drag-over");
+  });
+  np.addEventListener("drop", e => {
+    if (!noteDropActive()) return;
+    e.preventDefault(); depth = 0; np.classList.remove("drag-over");
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    const item = personalItems[selectedEntryIndex];
+    uploadFiles(files, ownerForNote(item)).then(() => {
+      noteFilesById[item.id] = undefined;
+      renderNoteFilesSection();
       refreshFilesCount();
     });
   });
@@ -2931,6 +3062,11 @@ window.addEventListener("drop", e => { if (dragHasFiles(e)) e.preventDefault(); 
 async function init() {
   await Promise.all([loadRemoteState(), loadInbox()]);
   routeInboxItems();
+  // give every note a stable id so files can attach to it across sessions;
+  // legacy notes use a deterministic id so two devices can't diverge
+  let addedIds = false;
+  personalItems.forEach(n => { if (n && !n.id) { n.id = legacyNoteId(n); addedIds = true; } });
+  if (addedIds) queueSave();
   refreshFilesCount();
   const lastView = localStorage.getItem(UI_VIEW_KEY) || "tasks";
   const lastProject = localStorage.getItem(UI_PROJECT_KEY);

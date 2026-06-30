@@ -214,11 +214,14 @@ class TodoHandler(http.server.SimpleHTTPRequestHandler):
                 records = read_json(FILES_INDEX, [])
             q = (parse_qs(parsed.query).get("q", [""])[0] or "").strip().lower()
             pid = (parse_qs(parsed.query).get("project", [""])[0] or "").strip()
+            nid = (parse_qs(parsed.query).get("note", [""])[0] or "").strip()
             out = []
             for r in records:
                 if not isinstance(r, dict):
                     continue
                 if pid and str(r.get("projectId", "")) != pid:
+                    continue
+                if nid and str(r.get("noteId", "")) != nid:
                     continue
                 if q and q not in (r.get("name", "").lower() + " " + r.get("text", "").lower()):
                     continue
@@ -296,6 +299,8 @@ class TodoHandler(http.server.SimpleHTTPRequestHandler):
                 "mime": str(data.get("mime", "") or ""),
                 "projectId": str(data.get("projectId", "") or ""),
                 "projectName": str(data.get("projectName", "") or ""),
+                "noteId": str(data.get("noteId", "") or ""),
+                "noteTitle": str(data.get("noteTitle", "") or ""),
                 "uploadedAt": datetime.now(timezone.utc).isoformat(),
                 "url": "/uploads/" + fid + "/" + name,
                 "text": extract_text(disk_path, ext),
@@ -327,6 +332,35 @@ class TodoHandler(http.server.SimpleHTTPRequestHandler):
             if removed and re.fullmatch(r"f_[A-Za-z0-9_\-]+", fid):
                 shutil.rmtree(os.path.join(UPLOADS, fid), ignore_errors=True)
             self.send_json(200, {"ok": removed})
+            return
+
+        if parsed.path == "/api/delete-files-for":
+            # cascade-delete every file attached to a project or note (on owner deletion)
+            try:
+                data = self.read_request_json()
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "invalid json"})
+                return
+            pid = str(data.get("projectId", "") or "")
+            nid = str(data.get("noteId", "") or "")
+            if not pid and not nid:
+                self.send_json(400, {"error": "projectId or noteId required"})
+                return
+            doomed = []
+            with FILE_LOCK:
+                records = read_json(FILES_INDEX, [])
+                kept = []
+                for r in records:
+                    if isinstance(r, dict) and ((pid and str(r.get("projectId", "")) == pid) or (nid and str(r.get("noteId", "")) == nid)):
+                        doomed.append(r.get("id", ""))
+                    else:
+                        kept.append(r)
+                if doomed:
+                    write_json(FILES_INDEX, kept)
+            for fid in doomed:
+                if re.fullmatch(r"f_[A-Za-z0-9_\-]+", str(fid)):
+                    shutil.rmtree(os.path.join(UPLOADS, fid), ignore_errors=True)
+            self.send_json(200, {"ok": True, "deleted": len(doomed)})
             return
 
         if parsed.path == "/api/state":
