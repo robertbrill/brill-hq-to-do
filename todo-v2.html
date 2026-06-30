@@ -137,6 +137,14 @@
     display: none;
   }
   .page.visible { display: block; }
+  #page-project-detail { position: relative; }
+  .drop-overlay {
+    position: absolute; inset: 0; z-index: 40;
+    display: none; align-items: center; justify-content: center; text-align: center;
+    background: var(--blue-soft); border: 2px dashed var(--blue); border-radius: 12px;
+    color: var(--blue); font-size: 18px; font-weight: 600; pointer-events: none; padding: 20px;
+  }
+  #page-project-detail.drag-over .drop-overlay { display: flex; }
 
   .page-title {
     font-size: 36px;
@@ -1143,6 +1151,7 @@
 
   <!-- ============ PROJECT DETAIL ============ -->
   <div class="page" id="page-project-detail">
+    <div class="drop-overlay" id="project-drop-overlay">&#128206; Drop files to attach to this project</div>
     <div id="project-detail-body"></div>
   </div>
 
@@ -2876,6 +2885,46 @@ document.getElementById("quick-add-form").addEventListener("submit", e => {
   e.preventDefault();
   addInboxTask();
 });
+
+/* ---------- drag & drop files onto a project ---------- */
+function dragHasFiles(e) {
+  return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+}
+function projectDropActive() {
+  return view === "projects" && !projectsOverview && activeProjectId && findProject(activeProjectId);
+}
+(function setupProjectDrop() {
+  const pd = document.getElementById("page-project-detail");
+  let depth = 0;
+  pd.addEventListener("dragenter", e => {
+    if (!projectDropActive() || !dragHasFiles(e)) return;
+    e.preventDefault(); depth++; pd.classList.add("drag-over");
+  });
+  pd.addEventListener("dragover", e => {
+    if (!projectDropActive() || !dragHasFiles(e)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = "copy";
+  });
+  pd.addEventListener("dragleave", e => {
+    if (!projectDropActive()) return;
+    depth = Math.max(0, depth - 1);
+    if (!depth) pd.classList.remove("drag-over");
+  });
+  pd.addEventListener("drop", e => {
+    if (!projectDropActive()) return;
+    e.preventDefault(); depth = 0; pd.classList.remove("drag-over");
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    const p = findProject(activeProjectId);
+    uploadFiles(files, p).then(() => {
+      projectFilesById[activeProjectId] = undefined;
+      renderProjectFilesSection();
+      refreshFilesCount();
+    });
+  });
+})();
+// stop a missed drop from navigating the whole page away to the file
+window.addEventListener("dragover", e => { if (dragHasFiles(e)) e.preventDefault(); });
+window.addEventListener("drop", e => { if (dragHasFiles(e)) e.preventDefault(); });
 
 /* ---------- init ---------- */
 
