@@ -660,6 +660,17 @@
     font-size: 13px;
   }
   .file-row:hover { background: var(--hover); }
+  .file-thumb {
+    width: 40px; height: 40px; min-width: 40px; object-fit: cover;
+    border-radius: 6px; cursor: zoom-in; background: var(--hover); border: 1px solid var(--border);
+  }
+  .lightbox {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center; padding: 32px;
+    background: rgba(0, 0, 0, 0.85); cursor: zoom-out;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
   .file-ext {
     font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em;
     color: #fff; background: var(--faint); border-radius: 4px;
@@ -1201,6 +1212,11 @@
       </div>
     </form>
   </div>
+</div>
+
+<!-- ============ Image lightbox ============ -->
+<div class="lightbox" id="image-lightbox" data-action="close-lightbox">
+  <img id="lightbox-img" src="" alt="">
 </div>
 
 <div class="toast" id="toast"></div>
@@ -2109,6 +2125,18 @@ function fileExtBadge(f) {
   return `<span class="file-ext">${escHtml((f.ext || "file").toUpperCase())}</span>`;
 }
 
+function isImageExt(ext) {
+  return ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"].includes((ext || "").toLowerCase());
+}
+
+// leading cell for a file row: a clickable thumbnail for images, else the ext badge
+function fileLeadCell(f) {
+  if (isImageExt(f.ext)) {
+    return `<img class="file-thumb" src="${escHtml(f.url)}" alt="" loading="lazy" data-action="view-image" data-url="${escHtml(f.url)}">`;
+  }
+  return fileExtBadge(f);
+}
+
 function readFileAsBase64(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -2171,7 +2199,7 @@ function projectFilesSectionHtml(pid) {
     : (files.length
         ? files.map(f => `
           <div class="file-row">
-            ${fileExtBadge(f)}
+            ${fileLeadCell(f)}
             <a class="file-name" href="${escHtml(f.url)}" target="_blank" rel="noopener" download="${escHtml(f.name)}">${escHtml(f.name)}</a>
             <span class="file-meta">${fmtBytes(f.size)} &middot; ${fmtStamp(f.uploadedAt)}</span>
             <button class="icon-btn danger" data-action="delete-file" data-id="${escHtml(f.id)}" data-scope="project">Delete</button>
@@ -2210,7 +2238,7 @@ function noteFilesSectionHtml(nid) {
     : (files.length
         ? files.map(f => `
           <div class="file-row">
-            ${fileExtBadge(f)}
+            ${fileLeadCell(f)}
             <a class="file-name" href="${escHtml(f.url)}" target="_blank" rel="noopener" download="${escHtml(f.name)}">${escHtml(f.name)}</a>
             <span class="file-meta">${fmtBytes(f.size)} &middot; ${fmtStamp(f.uploadedAt)}</span>
             <button class="icon-btn danger" data-action="delete-file" data-id="${escHtml(f.id)}" data-scope="note">Delete</button>
@@ -2267,7 +2295,7 @@ async function renderFilesView() {
       <span></span><span>Name</span><span>Attached to</span><span>Uploaded</span><span>Size</span><span></span>
     </div>` + files.map(f => `
     <div class="file-row file-row-grid">
-      ${fileExtBadge(f)}
+      ${fileLeadCell(f)}
       <a class="file-name" href="${escHtml(f.url)}" target="_blank" rel="noopener" download="${escHtml(f.name)}">${escHtml(f.name)}</a>
       <span class="file-proj">${ownerCell(f)}</span>
       <span class="file-meta">${fmtStamp(f.uploadedAt)}</span>
@@ -2659,6 +2687,15 @@ document.addEventListener("click", e => {
   if (a === "assign-project") openPicker(el.dataset.key);
   if (a === "picker-cancel") closePicker();
   if (a === "picker-choose") pickerChoose(el.dataset.id);
+  if (a === "view-image") {
+    const img = document.getElementById("lightbox-img");
+    img.src = el.dataset.url;
+    document.getElementById("image-lightbox").classList.add("open");
+  }
+  if (a === "close-lightbox") {
+    document.getElementById("image-lightbox").classList.remove("open");
+    document.getElementById("lightbox-img").src = "";
+  }
 
   if (a === "new-entry") newEntry();
   if (a === "delete-entry") deleteEntry();
@@ -2971,6 +3008,10 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && deleteMode) cancelDeleteMode();
   if (e.key === "Escape" && document.getElementById("picker-overlay").classList.contains("open")) closePicker();
   if (e.key === "Escape" && document.getElementById("newtask-overlay").classList.contains("open")) closeNewTaskDialog();
+  if (e.key === "Escape" && document.getElementById("image-lightbox").classList.contains("open")) {
+    document.getElementById("image-lightbox").classList.remove("open");
+    document.getElementById("lightbox-img").src = "";
+  }
 });
 
 document.addEventListener("focusout", e => {
