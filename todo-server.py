@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Todo server that serves the app, inbox updates, and shared UI state."""
 
+import base64
 import ipaddress
 import json
 import os
+import re
+import shutil
 import http.server
 import threading
-from datetime import datetime
-from urllib.parse import urlparse
+import zipfile
+from datetime import datetime, timezone
+from urllib.parse import urlparse, parse_qs
 
 # Serializes reads/writes of the JSON files now that requests run in parallel.
 FILE_LOCK = threading.Lock()
@@ -44,6 +48,64 @@ def ip_allowed(ip_str):
 DIR = os.path.dirname(os.path.abspath(__file__))
 INBOX = os.path.join(DIR, "todo-inbox.json")
 STATE = os.path.join(DIR, "todo-state.json")
+FILES_INDEX = os.path.join(DIR, "todo-files.json")
+UPLOADS = os.path.join(DIR, "uploads")
+
+MAX_UPLOAD = 50 * 1024 * 1024     # 50 MB per file
+TEXT_CAP = 200_000                # cap extracted text stored for search
+TEXT_EXTS = {
+    "txt", "md", "markdown", "csv", "tsv", "log", "json", "xml", "html", "htm",
+    "js", "ts", "jsx", "tsx", "css", "scss", "py", "rb", "go", "rs", "java",
+    "c", "h", "cpp", "sh", "bash", "zsh", "yml", "yaml", "toml", "ini", "sql", "rtf",
+}
+
+
+def _strip_xml(data):
+    # crude but dependency-free: drop tags, unescape the common entities
+    text = re.sub(r"<[^>]+>", " ", data.decode("utf-8", "ignore"))
+    for a, b in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'), ("&#39;", "'")):
+        text = text.replace(a, b)
+    return text
+
+
+def extract_text(path, ext):
+    """Best-effort text extraction for in-file content search. Returns "" if not feasible."""
+    ext = (ext or "").lower()
+    try:
+        if ext in TEXT_EXTS:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                return f.read(TEXT_CAP)
+        if ext == "docx":
+            with zipfile.ZipFile(path) as z:
+                return _strip_xml(z.read("word/document.xml"))[:TEXT_CAP]
+        if ext == "xlsx":
+            with zipfile.ZipFile(path) as z:
+                names = [n for n in z.namelist() if n.startswith("xl/") and n.endswith(".xml")]
+                return " ".join(_strip_xml(z.read(n)) for n in names)[:TEXT_CAP]
+        if ext == "pptx":
+            with zipfile.ZipFile(path) as z:
+                names = [n for n in z.namelist() if n.startswith("ppt/slides/") and n.endswith(".xml")]
+                return " ".join(_strip_xml(z.read(n)) for n in names)[:TEXT_CAP]
+        if ext == "pdf":
+            try:
+                from pypdf import PdfReader
+                reader = PdfReader(path)
+                out = []
+                for page in reader.pages:
+                    out.append(page.extract_text() or "")
+                    if sum(len(x) for x in out) > TEXT_CAP:
+                        break
+                return "\n".join(out)[:TEXT_CAP]
+            except Exception:
+                return ""
+    except Exception:
+        return ""
+    return ""
+
+
+def safe_name(name):
+    name = os.path.basename(str(name or "")).strip() or "file"
+    return re.sub(r'[^A-Za-z0-9._()\-]', "_", name)[:160]
 
 DEFAULT_STATE = {
     "completed": {},
@@ -147,6 +209,24 @@ class TodoHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json(200, projects)
             return
 
+        if parsed.path == "/api/files":
+            with FILE_LOCK:
+                records = read_json(FILES_INDEX, [])
+            q = (parse_qs(parsed.query).get("q", [""])[0] or "").strip().lower()
+            pid = (parse_qs(parsed.query).get("project", [""])[0] or "").strip()
+            out = []
+            for r in records:
+                if not isinstance(r, dict):
+                    continue
+                if pid and str(r.get("projectId", "")) != pid:
+                    continue
+                if q and q not in (r.get("name", "").lower() + " " + r.get("text", "").lower()):
+                    continue
+                out.append({k: r[k] for k in r if k != "text"})  # never ship the big text blob
+            out.sort(key=lambda r: r.get("uploadedAt", ""), reverse=True)
+            self.send_json(200, out)
+            return
+
         super().do_GET()
 
     def do_POST(self):
@@ -180,6 +260,73 @@ class TodoHandler(http.server.SimpleHTTPRequestHandler):
                 items.append(item)
                 write_json(INBOX, items)
             self.send_json(200, {"ok": True, "count": len(items)})
+            return
+
+        if parsed.path == "/api/upload-file":
+            try:
+                data = self.read_request_json()
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "invalid json"})
+                return
+            name = safe_name(data.get("name"))
+            b64 = data.get("dataBase64", "")
+            if not b64:
+                self.send_json(400, {"error": "no file data"})
+                return
+            try:
+                raw = base64.b64decode(b64)
+            except Exception:
+                self.send_json(400, {"error": "bad base64"})
+                return
+            if len(raw) > MAX_UPLOAD:
+                self.send_json(413, {"error": "file too large (max 50MB)"})
+                return
+            ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            fid = "f_" + base64.urlsafe_b64encode(os.urandom(9)).decode().rstrip("=")
+            folder = os.path.join(UPLOADS, fid)
+            os.makedirs(folder, exist_ok=True)
+            disk_path = os.path.join(folder, name)
+            with open(disk_path, "wb") as f:
+                f.write(raw)
+            record = {
+                "id": fid,
+                "name": name,
+                "ext": ext,
+                "size": len(raw),
+                "mime": str(data.get("mime", "") or ""),
+                "projectId": str(data.get("projectId", "") or ""),
+                "projectName": str(data.get("projectName", "") or ""),
+                "uploadedAt": datetime.now(timezone.utc).isoformat(),
+                "url": "/uploads/" + fid + "/" + name,
+                "text": extract_text(disk_path, ext),
+            }
+            with FILE_LOCK:
+                records = read_json(FILES_INDEX, [])
+                records.append(record)
+                write_json(FILES_INDEX, records)
+            meta = {k: record[k] for k in record if k != "text"}
+            meta["searchable"] = bool(record["text"].strip())
+            self.send_json(200, {"ok": True, "file": meta})
+            return
+
+        if parsed.path == "/api/delete-file":
+            try:
+                data = self.read_request_json()
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "invalid json"})
+                return
+            fid = str(data.get("id", "") or "")
+            removed = False
+            with FILE_LOCK:
+                records = read_json(FILES_INDEX, [])
+                kept = [r for r in records if isinstance(r, dict) and r.get("id") != fid]
+                removed = len(kept) != len(records)
+                if removed:
+                    write_json(FILES_INDEX, kept)
+            # only touch a folder that is actually one of ours
+            if removed and re.fullmatch(r"f_[A-Za-z0-9_\-]+", fid):
+                shutil.rmtree(os.path.join(UPLOADS, fid), ignore_errors=True)
+            self.send_json(200, {"ok": removed})
             return
 
         if parsed.path == "/api/state":

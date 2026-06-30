@@ -12,3 +12,7 @@ supabase-credentials*
 # OS / editor cruft
 .DS_Store
 *.swp
+
+# Uploaded project files (live data, stays on the Mac)
+uploads/
+todo-files.json

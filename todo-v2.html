@@ -638,6 +638,44 @@
   .ptodo-row:hover { background: var(--hover); }
   .ptodo-row.done .task-text { color: var(--faint); text-decoration: line-through; }
 
+  /* ============ Files ============ */
+  .files-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-weight: 600; font-size: 14px; }
+  .files-head span:first-child { flex: 1; }
+  .file-upload-btn {
+    font-size: 13px; font-weight: 600; color: var(--blue);
+    padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: 7px; cursor: pointer;
+  }
+  .file-upload-btn:hover { background: var(--hover); }
+  .file-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 6px; border-radius: var(--radius); border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .file-row:hover { background: var(--hover); }
+  .file-ext {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em;
+    color: #fff; background: var(--faint); border-radius: 4px;
+    padding: 3px 5px; min-width: 34px; text-align: center; flex-shrink: 0;
+  }
+  .file-name { flex: 1; min-width: 0; color: var(--text); text-decoration: none; word-break: break-word; }
+  .file-name:hover { color: var(--blue); text-decoration: underline; }
+  .file-meta { color: var(--faint); font-size: 12px; white-space: nowrap; }
+  .file-proj { min-width: 0; }
+  .link-btn {
+    border: none; background: transparent; font: inherit; font-size: 12.5px;
+    color: var(--blue); cursor: pointer; padding: 2px 6px; border-radius: 5px; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .link-btn:hover { background: var(--hover); }
+  .project-files { margin-bottom: 8px; }
+  /* aggregate Files view: 6-column grid */
+  .file-row-grid, .file-row-head {
+    display: grid;
+    grid-template-columns: 46px 1fr 1.1fr 1.3fr 70px 64px;
+    gap: 10px; align-items: center;
+  }
+  .file-row-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--faint); font-weight: 600; border-bottom: 1px solid var(--border-strong); padding: 6px; }
+  .file-row-head:hover { background: transparent; }
   .danger-zone { margin-top: 40px; }
   .danger-link {
     border: none;
@@ -993,6 +1031,12 @@
     .ptodo-row .pill.clickable { margin-left: 26px; }
     .task-row .task-actions, .ptodo-row .task-actions { margin-left: auto; }
     .note-preview { max-width: 160px; }
+    /* aggregate Files view: drop the table grid, stack each file as a card */
+    .file-row-head { display: none; }
+    .file-row-grid { display: flex; flex-wrap: wrap; row-gap: 3px; }
+    .file-row-grid .file-name { flex: 1 1 calc(100% - 56px); }
+    .file-row-grid .file-proj { flex-basis: 100%; padding-left: 56px; }
+    .file-row-grid .file-meta { font-size: 11.5px; }
     /* bigger tap targets for checking off / opening to-dos in the overview cards */
     .card-todo { padding: 7px 4px; gap: 12px; }
     .card-todo .checkbox { width: 20px; height: 20px; min-width: 20px; margin-top: 0; }
@@ -1023,6 +1067,9 @@
     <span class="nav-icon">&#128221;</span> Long Notes <span class="nav-count" id="nav-personal-count"></span>
   </button>
   <div class="note-groups-nav" id="note-groups-nav"></div>
+  <button class="nav-item" id="nav-files" data-action="nav" data-view="files">
+    <span class="nav-icon">&#128206;</span> Files <span class="nav-count" id="nav-files-count"></span>
+  </button>
   <div class="sidebar-footer" id="sidebar-stats"></div>
 </aside>
 
@@ -1097,6 +1144,17 @@
   <!-- ============ PROJECT DETAIL ============ -->
   <div class="page" id="page-project-detail">
     <div id="project-detail-body"></div>
+  </div>
+
+  <!-- ============ FILES ============ -->
+  <div class="page" id="page-files">
+    <div class="page-title">Files</div>
+    <div class="page-subtitle" id="files-subtitle"></div>
+    <div class="proj-search">
+      <span class="magnifier">&#128269;</span>
+      <input id="file-search-input" type="search" placeholder="Search file names &amp; contents&hellip;" autocomplete="off">
+    </div>
+    <div id="files-table"></div>
   </div>
 
 </main>
@@ -1413,6 +1471,7 @@ function renderNav() {
   document.getElementById("nav-tasks").classList.toggle("current", view === "tasks");
   document.getElementById("nav-projects").classList.toggle("current", view === "projects");
   document.getElementById("nav-personal").classList.toggle("current", view === "personal");
+  document.getElementById("nav-files").classList.toggle("current", view === "files");
 
   let total = 0, done = 0;
   getAllSections().forEach(section => {
@@ -1443,6 +1502,7 @@ function setView(next) {
   document.getElementById("entries-sidebar").classList.toggle("open", view === "personal");
   document.getElementById("page-project-detail").classList.toggle("visible", view === "projects");
   document.getElementById("projects-sidebar").classList.toggle("open", view === "projects");
+  document.getElementById("page-files").classList.toggle("visible", view === "files");
   try {
     localStorage.setItem(UI_VIEW_KEY, view);
     if (view === "projects" && activeProjectId) localStorage.setItem(UI_PROJECT_KEY, activeProjectId);
@@ -1819,11 +1879,15 @@ function renderProjectDetail() {
         <div class="section-body">${finished.map(t => ptodoRowHtml(p, t)).join("")}</div>
       </div>` : ""}
 
+    <hr class="divider">
+    <div class="project-files" id="project-files"></div>
+
     <div class="danger-zone">
       <button class="danger-link" data-action="delete-project" data-id="${escHtml(p.id)}">Delete project&hellip;</button>
     </div>`;
 
   autosizeNotes();
+  renderProjectFilesSection();
   const form = document.getElementById("ptodo-add-form");
   if (form) form.addEventListener("submit", e => {
     e.preventDefault();
@@ -1991,6 +2055,150 @@ function archiveEntry() {
   renderNav();
 }
 
+/* ---------- files ---------- */
+
+let fileSearchQuery = "";
+let projectFilesById = {};   // projectId -> array of file records (cache)
+
+function fmtBytes(n) {
+  if (!n && n !== 0) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + " KB";
+  return (n / 1024 / 1024).toFixed(1) + " MB";
+}
+
+function fmtStamp(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return escHtml(iso || "");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
+    " · " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function fileExtBadge(f) {
+  return `<span class="file-ext">${escHtml((f.ext || "file").toUpperCase())}</span>`;
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function uploadFiles(fileList, project) {
+  let ok = 0;
+  for (const file of Array.from(fileList)) {
+    try {
+      const dataBase64 = await readFileAsBase64(file);
+      const res = await fetch("/api/upload-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: file.name, mime: file.type,
+          projectId: project ? project.id : "",
+          projectName: project ? (project.name || "Untitled") : "",
+          dataBase64
+        })
+      });
+      if (res.ok) ok++;
+      else { const e = await res.json().catch(() => ({})); showToast(e.error || "Upload failed"); }
+    } catch (e) { showToast("Upload failed"); }
+  }
+  if (ok) showToast(`Uploaded ${ok} file${ok === 1 ? "" : "s"}`);
+  return ok;
+}
+
+async function deleteFile(id) {
+  if (!confirm("Delete this file? This can't be undone.")) return false;
+  try {
+    const res = await fetch("/api/delete-file", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    if (res.ok) { showToast("File deleted"); return true; }
+  } catch (e) {}
+  showToast("Delete failed");
+  return false;
+}
+
+async function refreshFilesCount() {
+  try {
+    const res = await fetch("/api/files");
+    const all = res.ok ? await res.json() : [];
+    document.getElementById("nav-files-count").textContent = all.length || "";
+  } catch (e) {}
+}
+
+/* --- per-project files section (inside project detail) --- */
+
+function projectFilesSectionHtml(pid) {
+  const files = projectFilesById[pid];
+  const rows = files === undefined
+    ? `<div class="card-empty">Loading files&hellip;</div>`
+    : (files.length
+        ? files.map(f => `
+          <div class="file-row">
+            ${fileExtBadge(f)}
+            <a class="file-name" href="${escHtml(f.url)}" target="_blank" rel="noopener" download="${escHtml(f.name)}">${escHtml(f.name)}</a>
+            <span class="file-meta">${fmtBytes(f.size)} &middot; ${fmtStamp(f.uploadedAt)}</span>
+            <button class="icon-btn danger" data-action="delete-file" data-id="${escHtml(f.id)}" data-scope="project">Delete</button>
+          </div>`).join("")
+        : `<div class="card-empty">No files attached yet.</div>`);
+  return `<div class="files-head">
+      <span>&#128206; Files</span>
+      <label class="file-upload-btn">+ Upload<input type="file" multiple data-role="project-file-input" hidden></label>
+    </div>${rows}`;
+}
+
+function renderProjectFilesSection() {
+  const box = document.getElementById("project-files");
+  if (!box) return;
+  const pid = activeProjectId;
+  box.innerHTML = projectFilesSectionHtml(pid);
+  if (projectFilesById[pid] === undefined) fetchProjectFiles(pid);
+}
+
+async function fetchProjectFiles(pid) {
+  try {
+    const res = await fetch("/api/files?project=" + encodeURIComponent(pid));
+    projectFilesById[pid] = res.ok ? await res.json() : [];
+  } catch (e) { projectFilesById[pid] = []; }
+  if (activeProjectId === pid && view === "projects") renderProjectFilesSection();
+}
+
+/* --- aggregate Files view --- */
+
+async function renderFilesView() {
+  const table = document.getElementById("files-table");
+  const q = fileSearchQuery.trim();
+  let files = [];
+  try {
+    const res = await fetch("/api/files" + (q ? "?q=" + encodeURIComponent(q) : ""));
+    files = res.ok ? await res.json() : [];
+  } catch (e) { table.innerHTML = `<div class="empty-note">Couldn't reach the server.</div>`; return; }
+  if (!q) document.getElementById("nav-files-count").textContent = files.length || "";
+  document.getElementById("files-subtitle").textContent =
+    `${files.length} file${files.length === 1 ? "" : "s"}${q ? " matching “" + q + "”" : ""}`;
+  if (!files.length) {
+    table.innerHTML = `<div class="empty-note">${q ? "No files match your search." : "No files yet. Upload files from a project."}</div>`;
+    return;
+  }
+  table.innerHTML = `
+    <div class="file-row file-row-head">
+      <span></span><span>Name</span><span>Project</span><span>Uploaded</span><span>Size</span><span></span>
+    </div>` + files.map(f => `
+    <div class="file-row file-row-grid">
+      ${fileExtBadge(f)}
+      <a class="file-name" href="${escHtml(f.url)}" target="_blank" rel="noopener" download="${escHtml(f.name)}">${escHtml(f.name)}</a>
+      <span class="file-proj">${f.projectName ? `<button class="link-btn" data-action="open-project" data-id="${escHtml(f.projectId)}">${escHtml(f.projectName)}</button>` : "<span class='file-meta'>&mdash;</span>"}</span>
+      <span class="file-meta">${fmtStamp(f.uploadedAt)}</span>
+      <span class="file-meta">${fmtBytes(f.size)}</span>
+      <button class="icon-btn danger" data-action="delete-file" data-id="${escHtml(f.id)}" data-scope="files">Delete</button>
+    </div>`).join("");
+}
+
 /* ---------- render dispatcher ---------- */
 
 function render() {
@@ -1998,6 +2206,7 @@ function render() {
   if (view === "tasks") renderTasks();
   if (view === "projects") { renderProjectsMain(); renderProjectsSidebar(); }
   if (view === "personal") renderPersonal();
+  if (view === "files") renderFilesView();
 }
 
 /* ---------- actions: tasks ---------- */
@@ -2423,6 +2632,15 @@ document.addEventListener("click", e => {
   if (a === "new-project") openNewTaskDialog();
   if (a === "newtask-cancel") closeNewTaskDialog();
   if (a === "open-project") { setOverview(false); activeProjectId = el.dataset.id; setView("projects"); }
+  if (a === "delete-file") {
+    const id = el.dataset.id, scope = el.dataset.scope;
+    deleteFile(id).then(ok => {
+      if (!ok) return;
+      refreshFilesCount();
+      if (scope === "project") { projectFilesById[activeProjectId] = undefined; renderProjectFilesSection(); }
+      else renderFilesView();
+    });
+  }
   if (a === "open-card-todo") {
     setOverview(false);
     activeProjectId = el.dataset.pid;
@@ -2551,6 +2769,7 @@ document.addEventListener("input", e => {
     autosizeNotes();
   }
   if (el.id === "search-input") { searchQuery = el.value; renderTasks(); }
+  if (el.id === "file-search-input") { fileSearchQuery = el.value; renderFilesView(); }
   if (el.id === "project-search-input") {
     projectSearchQuery = el.value;
     renderProjectsMain();
@@ -2584,6 +2803,16 @@ document.addEventListener("input", e => {
 
 document.addEventListener("change", e => {
   const el = e.target;
+  if (el.dataset.role === "project-file-input") {
+    const p = findProject(activeProjectId);
+    const files = el.files;
+    el.value = "";
+    uploadFiles(files, p).then(() => {
+      projectFilesById[activeProjectId] = undefined;
+      renderProjectFilesSection();
+      refreshFilesCount();
+    });
+  }
   if (el.dataset.role === "entry-group") {
     const item = personalItems[selectedEntryIndex];
     if (item) { item.group = el.value.trim(); queueSave(); renderNoteGroupsNav(); renderEntriesList(); }
@@ -2653,6 +2882,7 @@ document.getElementById("quick-add-form").addEventListener("submit", e => {
 async function init() {
   await Promise.all([loadRemoteState(), loadInbox()]);
   routeInboxItems();
+  refreshFilesCount();
   const lastView = localStorage.getItem(UI_VIEW_KEY) || "tasks";
   const lastProject = localStorage.getItem(UI_PROJECT_KEY);
   if (lastView === "projects" || lastView === "detail") {
