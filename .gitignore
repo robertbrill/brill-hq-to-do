@@ -8,6 +8,12 @@ todo-inbox.json
 .env
 .env.*
 supabase-credentials*
+# Local Supabase config (URL + anon key). Both are public-safe, but keep them
+# out of the repo by default; commit a real config.js only for a private-repo
+# Vercel deploy (see supabase/MIGRATION.md). Leading slash = root only, so the
+# api/config.js serverless function is NOT ignored.
+/config.js
+node_modules/
 
 # OS / editor cruft
 .DS_Store
