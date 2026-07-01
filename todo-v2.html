@@ -1011,6 +1011,42 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* ============ Global search ============ */
+  .global-search-btn {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; border: 1px solid var(--border-strong); background: var(--bg);
+    font: inherit; font-size: 13px; color: var(--muted); cursor: pointer;
+    padding: 7px 10px; border-radius: 8px; margin: 2px 0 8px;
+  }
+  .global-search-btn:hover { background: var(--hover); }
+  .gs-kbd { font-size: 11px; color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+  #search-overlay { align-items: flex-start; padding: 10vh 16px 16px; }
+  .search-modal {
+    background: var(--bg); border-radius: 12px; box-shadow: var(--shadow-card);
+    width: 100%; max-width: 600px; max-height: 74vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  #global-search-input {
+    border: none; border-bottom: 1px solid var(--border); outline: none;
+    font: inherit; font-size: 17px; padding: 16px 18px; background: transparent; color: var(--text);
+  }
+  .search-results { overflow-y: auto; padding: 6px; }
+  .search-hint { color: var(--faint); font-size: 13px; padding: 18px; text-align: center; }
+  .search-group-label {
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--faint); padding: 10px 10px 4px;
+  }
+  .search-result {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    border: none; background: transparent; font: inherit; cursor: pointer;
+    padding: 8px 10px; border-radius: 7px; color: var(--text);
+  }
+  .search-result:hover, .search-result.active { background: var(--hover); }
+  .search-result .sr-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+  .search-result .sr-text { flex: 1; min-width: 0; }
+  .search-result .sr-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-result .sr-sub { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-more { font-size: 12px; color: var(--faint); padding: 4px 10px 8px; }
+
   /* ============ Mobile ============ */
   @media (max-width: 760px) {
     body { flex-direction: column; }
@@ -1076,6 +1112,9 @@
     <img src="brill-logo.png" alt="">
     <span>HQ Tasks</span>
   </div>
+  <button class="global-search-btn" data-action="open-search">
+    <span>&#128269; Search everything</span><span class="gs-kbd">&#8984;K</span>
+  </button>
   <button class="nav-item current" id="nav-tasks" data-action="nav" data-view="tasks">
     <span class="nav-icon">&#9745;</span> Tasks <span class="nav-count" id="nav-tasks-count"></span>
   </button>
@@ -1214,6 +1253,14 @@
   </div>
 </div>
 
+<!-- ============ Global search ============ -->
+<div class="modal-overlay" id="search-overlay">
+  <div class="search-modal">
+    <input id="global-search-input" type="search" placeholder="Search tasks, projects, to-dos, notes &amp; files&hellip;" autocomplete="off">
+    <div class="search-results" id="search-results"></div>
+  </div>
+</div>
+
 <!-- ============ Image lightbox ============ -->
 <div class="lightbox" id="image-lightbox" data-action="close-lightbox">
   <img id="lightbox-img" src="" alt="">
@@ -1279,6 +1326,7 @@ let pickerKeys = [];
 let remoteLoaded = false;
 let saveTimer = null;
 let dirty = false;
+let lastServerPayload = "";   // the server state we've already reconciled with (for live multi-device sync)
 
 let collapsedSections = new Set();
 try { collapsedSections = new Set(JSON.parse(localStorage.getItem(UI_COLLAPSED_KEY)) || []); } catch (e) {}
@@ -1380,6 +1428,7 @@ async function loadRemoteState() {
     projects = Array.isArray(data.projectItems) ? data.projectItems.map(normalizeProject) : [];
     personalItems = Array.isArray(data.personalItems) ? data.personalItems.filter(i => i && typeof i === "object") : [];
     remoteLoaded = true;
+    lastServerPayload = serverPayloadOf(data);
   } catch (e) {
     remoteLoaded = false;
     showToast("Couldn't reach the server — read-only view");
@@ -1390,24 +1439,67 @@ function savePayload() {
   return JSON.stringify({ completed, edits, notes, deleted, routedInbox, projectItems: projects, personalItems });
 }
 
+// canonical signature of a server /api/state response, comparable to savePayload()
+function serverPayloadOf(data) {
+  return JSON.stringify({
+    completed: data.completed || {}, edits: data.edits || {}, notes: data.notes || {}, deleted: data.deleted || {},
+    routedInbox: data.routedInbox || {},
+    projectItems: Array.isArray(data.projectItems) ? data.projectItems : [],
+    personalItems: Array.isArray(data.personalItems) ? data.personalItems : [],
+  });
+}
+
 function queueSave() {
   if (!remoteLoaded) return;
   dirty = true;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
+    const body = savePayload();
     dirty = false;
     try {
       const res = await fetch(STATE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: savePayload()
+        body
       });
       if (!res.ok) { dirty = true; showToast("Save failed — server error"); }
+      else lastServerPayload = body;   // this is now the server's state; don't re-sync it back
     } catch (e) {
       dirty = true;
       showToast("Save failed — server offline");
     }
   }, 350);
+}
+
+// Live multi-device sync: pull the server state periodically so a second computer
+// stays current (and can't silently overwrite newer data with a stale save).
+function isEditingSomething() {
+  const ae = document.activeElement;
+  if (ae && (ae.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(ae.tagName))) return true;
+  if (document.querySelector(".modal-overlay.open, #image-lightbox.open")) return true;
+  return !!deleteMode;
+}
+
+async function maybeSyncState() {
+  if (!remoteLoaded || dirty || isEditingSomething()) return;  // don't stomp pending edits or the UI while in use
+  try {
+    const res = await fetch(STATE_URL + "?t=" + Date.now());
+    if (!res.ok) return;
+    const data = await res.json();
+    const incoming = serverPayloadOf(data);
+    if (incoming === lastServerPayload) return;   // server hasn't changed since we last saw it
+    // another device changed the data — adopt it
+    completed = data.completed && typeof data.completed === "object" ? data.completed : {};
+    edits = data.edits && typeof data.edits === "object" ? data.edits : {};
+    notes = data.notes && typeof data.notes === "object" ? data.notes : {};
+    deleted = data.deleted && typeof data.deleted === "object" ? data.deleted : {};
+    routedInbox = data.routedInbox && typeof data.routedInbox === "object" ? data.routedInbox : {};
+    projects = Array.isArray(data.projectItems) ? data.projectItems.map(normalizeProject) : [];
+    personalItems = Array.isArray(data.personalItems) ? data.personalItems.filter(i => i && typeof i === "object") : [];
+    personalItems.forEach(n => { if (n && !n.id) n.id = legacyNoteId(n); });
+    lastServerPayload = incoming;
+    render();
+  } catch (e) { /* offline; try next tick */ }
 }
 
 /* Hidden tabs throttle timers, so the debounced save may never fire before
@@ -2304,6 +2396,114 @@ async function renderFilesView() {
     </div>`).join("");
 }
 
+/* ---------- global search ---------- */
+
+function stripHtml(html) {
+  return String(html || "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ");
+}
+
+function openSearch() {
+  document.getElementById("search-overlay").classList.add("open");
+  const input = document.getElementById("global-search-input");
+  input.value = "";
+  runGlobalSearch("");
+  input.focus();
+}
+
+function closeSearch() {
+  document.getElementById("search-overlay").classList.remove("open");
+}
+
+const SEARCH_GROUP_LIMIT = 6;
+
+function searchResultRow(action, data, icon, title, sub) {
+  const attrs = Object.entries(data).map(([k, v]) => `data-${k}="${escHtml(v)}"`).join(" ");
+  return `<button class="search-result" data-action="${action}" ${attrs}>
+    <span class="sr-icon">${icon}</span>
+    <span class="sr-text"><div class="sr-title">${escHtml(title)}</div>${sub ? `<div class="sr-sub">${escHtml(sub)}</div>` : ""}</span>
+  </button>`;
+}
+
+function renderSearchGroup(label, rows) {
+  if (!rows.length) return "";
+  const shown = rows.slice(0, SEARCH_GROUP_LIMIT);
+  const more = rows.length - shown.length;
+  return `<div class="search-group-label">${label} (${rows.length})</div>${shown.join("")}${more ? `<div class="search-more">+ ${more} more&hellip;</div>` : ""}`;
+}
+
+async function runGlobalSearch(raw) {
+  const q = raw.trim().toLowerCase();
+  const box = document.getElementById("search-results");
+  if (!q) { box.innerHTML = `<div class="search-hint">Search across tasks, projects, to-dos, long notes, and files.</div>`; return; }
+
+  // Tasks
+  const taskRows = [];
+  getAllSections().forEach(section => {
+    section.items.forEach((item, idx) => {
+      const key = taskKey(section.id, idx);
+      if (deleted[key]) return;
+      const text = edits[key] || item || "";
+      const note = notes[key] || "";
+      if ((text + " " + note).toLowerCase().includes(q)) {
+        taskRows.push(searchResultRow("search-task", { q: raw }, "&#9745;", text, section.title));
+      }
+    });
+  });
+
+  // Projects + their to-dos
+  const projRows = [], todoRows = [];
+  projects.filter(p => !p.isTemplate).forEach(p => {
+    if ((p.name || "").toLowerCase().includes(q) || (p.notes || "").toLowerCase().includes(q)) {
+      projRows.push(searchResultRow("search-open-project", { id: p.id }, "&#128193;", p.name || "Untitled", (p.status || "Active") + (p.archived ? " · archived" : "")));
+    }
+    p.todos.forEach(t => {
+      if ((t.text || "").toLowerCase().includes(q) || (t.notes || "").toLowerCase().includes(q)) {
+        todoRows.push(searchResultRow("search-open-project", { id: p.id }, "&#9744;", t.text || "", "in " + (p.name || "Untitled")));
+      }
+    });
+  });
+
+  // Long notes
+  const noteRows = [];
+  personalItems.forEach(n => {
+    if (!n) return;
+    const hay = ((n.title || "") + " " + stripHtml(n.body) + " " + (n.group || "")).toLowerCase();
+    if (hay.includes(q)) {
+      noteRows.push(searchResultRow("search-open-note", { id: n.id || "" }, "&#128221;", n.title || "Untitled", (n.group ? n.group + " · " : "") + (n.archived ? "archived note" : "note")));
+    }
+  });
+
+  box.innerHTML =
+    renderSearchGroup("Tasks", taskRows) +
+    renderSearchGroup("Projects", projRows) +
+    renderSearchGroup("Project to-dos", todoRows) +
+    renderSearchGroup("Long notes", noteRows) +
+    `<div id="search-files-group"></div>` +
+    (taskRows.length + projRows.length + todoRows.length + noteRows.length ? "" : `<div class="search-hint" id="search-empty">Searching files&hellip;</div>`);
+
+  // Files (server-side name + content search) — appended when it returns
+  try {
+    const res = await fetch("/api/files?q=" + encodeURIComponent(raw));
+    const files = res.ok ? await res.json() : [];
+    // guard: user may have typed more since this fired
+    if (document.getElementById("global-search-input").value.trim().toLowerCase() !== q) return;
+    const fileRows = files.map(f => {
+      const owner = f.projectName ? "in " + f.projectName : (f.noteTitle ? "in " + f.noteTitle : "");
+      return searchResultRow("search-open-file", { url: f.url, ext: f.ext || "" }, "&#128206;", f.name, owner);
+    });
+    const slot = document.getElementById("search-files-group");
+    if (slot) slot.innerHTML = renderSearchGroup("Files", fileRows);
+    const empty = document.getElementById("search-empty");
+    if (empty) empty.remove();
+    if (!taskRows.length && !projRows.length && !todoRows.length && !noteRows.length && !fileRows.length) {
+      box.innerHTML = `<div class="search-hint">No matches for &ldquo;${escHtml(raw)}&rdquo;.</div>`;
+    }
+  } catch (e) {
+    const empty = document.getElementById("search-empty");
+    if (empty) empty.remove();
+  }
+}
+
 /* ---------- render dispatcher ---------- */
 
 function render() {
@@ -2757,6 +2957,28 @@ document.addEventListener("click", e => {
       setView("personal");
     } else { showToast("Note not found"); }
   }
+  if (a === "open-search") openSearch();
+  if (a === "search-task") {
+    closeSearch(); setView("tasks");
+    taskFilter = "all"; syncFilterTabs();
+    searchQuery = el.dataset.q || "";
+    const si = document.getElementById("search-input"); if (si) si.value = searchQuery;
+    renderTasks();
+  }
+  if (a === "search-open-project") { closeSearch(); setOverview(false); activeProjectId = el.dataset.id; setView("projects"); }
+  if (a === "search-open-note") {
+    closeSearch();
+    const idx = personalItems.findIndex(n => n && n.id === el.dataset.id);
+    if (idx >= 0) { showArchivedNotes = !!personalItems[idx].archived; selectedNoteGroup = "__all__"; selectedEntryIndex = idx; setView("personal"); }
+  }
+  if (a === "search-open-file") {
+    if (isImageExt(el.dataset.ext)) {
+      const img = document.getElementById("lightbox-img"); img.src = el.dataset.url;
+      document.getElementById("image-lightbox").classList.add("open");
+    } else {
+      window.open(el.dataset.url, "_blank", "noopener");
+    }
+  }
   if (a === "delete-file") {
     const id = el.dataset.id, scope = el.dataset.scope;
     deleteFile(id).then(ok => {
@@ -2804,6 +3026,10 @@ document.getElementById("picker-overlay").addEventListener("click", e => {
 
 document.getElementById("newtask-overlay").addEventListener("click", e => {
   if (e.target === e.currentTarget) closeNewTaskDialog();
+});
+
+document.getElementById("search-overlay").addEventListener("click", e => {
+  if (e.target === e.currentTarget) closeSearch();
 });
 
 document.getElementById("newtask-form").addEventListener("submit", e => {
@@ -2900,6 +3126,7 @@ document.addEventListener("input", e => {
   }
   if (el.id === "search-input") { searchQuery = el.value; renderTasks(); }
   if (el.id === "file-search-input") { fileSearchQuery = el.value; renderFilesView(); }
+  if (el.id === "global-search-input") { runGlobalSearch(el.value); }
   if (el.id === "project-search-input") {
     projectSearchQuery = el.value;
     renderProjectsMain();
@@ -2986,6 +3213,11 @@ document.addEventListener("change", e => {
 
 document.addEventListener("keydown", e => {
   const el = e.target;
+  // Cmd/Ctrl+K opens global search from anywhere; "/" opens it when not typing in a field
+  if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); openSearch(); return; }
+  if (e.key === "/" && !(el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)))) {
+    e.preventDefault(); openSearch(); return;
+  }
   if (el.dataset && el.dataset.role === "card-add" && e.key === "Enter") {
     e.preventDefault();
     addCardTodo(el.dataset.pid, el);
@@ -3012,6 +3244,7 @@ document.addEventListener("keydown", e => {
     document.getElementById("image-lightbox").classList.remove("open");
     document.getElementById("lightbox-img").src = "";
   }
+  if (e.key === "Escape" && document.getElementById("search-overlay").classList.contains("open")) closeSearch();
 });
 
 document.addEventListener("focusout", e => {
@@ -3127,6 +3360,11 @@ setInterval(async () => {
   const filed = routeInboxItems();
   if (view === "tasks" || filed) render(); else renderNav();
 }, INBOX_POLL_MS);
+
+// keep this device in sync with any other computer editing the same data
+setInterval(maybeSyncState, 12000);
+// also pull fresh when returning to the tab, so switching computers shows current data fast
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") maybeSyncState(); });
 </script>
 </body>
 </html>
