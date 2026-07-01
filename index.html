@@ -1585,22 +1585,28 @@ function routeInboxItems() {
     const wanted = item.project.trim().toLowerCase();
     let p = projects.find(x => !x.isTemplate && x.ai && (x.name || "").trim().toLowerCase() === wanted);
     if (!p) {
+      // key order mirrors loadAll()'s project shape so the sync signature stays stable
       p = {
         id: uid("p"), name: item.project.trim(), status: "Active", owner: "", due: "", notes: "",
-        personal: false, ai: true, todos: [], isTemplate: false,
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        personal: false, ai: true, archived: false, isTemplate: false,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), todos: []
       };
       projects.unshift(p);
     }
-    p.todos.unshift({
-      id: uid("pt"), text: item.task, completed: false,
-      urgency: ROUTE_URGENCY[item.priority] || "medium",
-      createdAt: new Date().toISOString(), notes: item.notes || ""
-    });
-    touchProject(p);
+    // Dedup guard: if the routed flag failed to persist last time, a reload
+    // re-runs this — don't file the same task twice into the project.
+    const dupText = (item.task || "").trim().toLowerCase();
+    if (!p.todos.some(t => (t.text || "").trim().toLowerCase() === dupText)) {
+      p.todos.unshift({
+        id: uid("pt"), text: item.task, completed: false,
+        urgency: ROUTE_URGENCY[item.priority] || "medium",
+        createdAt: new Date().toISOString(), notes: item.notes || ""
+      });
+      touchProject(p);
+      routedCount++;
+    }
     item.routed = true;
     BrillDB.markInboxRouted(item.id);
-    routedCount++;
   });
   if (routedCount) {
     queueSave();
@@ -2200,7 +2206,7 @@ function newEntry() {
   // make sure the new (ungrouped, active) note is visible in whatever view we're in
   showArchivedNotes = false;
   selectedNoteGroup = "__all__";
-  personalItems.unshift({ id: uid("n"), title: "", body: "", createdAt: new Date().toLocaleString() });
+  personalItems.unshift({ id: uid("n"), title: "", body: "", createdAt: new Date().toISOString() });
   selectedEntryIndex = 0;
   queueSave();
   renderPersonal();
@@ -2230,7 +2236,7 @@ function archiveEntry() {
   const item = personalItems[selectedEntryIndex];
   if (!item) return;
   item.archived = !item.archived;
-  item.updatedAt = new Date().toLocaleString();
+  item.updatedAt = new Date().toISOString();
   queueSave();
   showToast(item.archived ? "Note archived" : "Note unarchived");
   // the note just left the current view; move selection to a visible one
@@ -2950,7 +2956,7 @@ document.addEventListener("click", e => {
     const body = document.querySelector('[data-role="entry-body"]');
     if (body) {
       const item = personalItems[selectedEntryIndex];
-      if (item) { item.body = body.innerHTML; item.updatedAt = new Date().toLocaleString(); queueSave(); }
+      if (item) { item.body = body.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
     }
   }
   if (a === "checklist") {
@@ -2965,7 +2971,7 @@ document.addEventListener("click", e => {
       }
       if (ul) ul.classList.toggle("checklist");  // toggle between bullets and tick-boxes
       const item = personalItems[selectedEntryIndex];
-      if (item) { item.body = body.innerHTML; item.updatedAt = new Date().toLocaleString(); queueSave(); }
+      if (item) { item.body = body.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
     }
   }
 
@@ -3080,7 +3086,7 @@ document.addEventListener("click", e => {
   li.classList.toggle("checked");
   const body = li.closest('[data-role="entry-body"]');
   const item = personalItems[selectedEntryIndex];
-  if (item && body) { item.body = body.innerHTML; item.updatedAt = new Date().toLocaleString(); queueSave(); }
+  if (item && body) { item.body = body.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
 });
 
 /* find the nearest ancestor of a given tag from the caret, within the note editor */
@@ -3162,7 +3168,7 @@ document.addEventListener("input", e => {
     const item = personalItems[selectedEntryIndex];
     if (item) {
       item.title = el.value;
-      item.updatedAt = new Date().toLocaleString();
+      item.updatedAt = new Date().toISOString();
       queueSave();
       const listTitle = document.querySelector(`.entry-item[data-idx="${selectedEntryIndex}"] .entry-item-title`);
       if (listTitle) {
@@ -3174,12 +3180,12 @@ document.addEventListener("input", e => {
   if (el.dataset.role === "entry-body") {
     if (e.inputType === "insertText" && (e.data === " " || e.data === " ")) maybeBulletAutoformat(el);
     const item = personalItems[selectedEntryIndex];
-    if (item) { item.body = el.innerHTML; item.updatedAt = new Date().toLocaleString(); queueSave(); }
+    if (item) { item.body = el.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
   }
   if (el.dataset.role === "entry-group") {
     // save while typing; the sidebar re-groups on change (blur/enter) to avoid jumpiness
     const item = personalItems[selectedEntryIndex];
-    if (item) { item.group = el.value; item.updatedAt = new Date().toLocaleString(); queueSave(); }
+    if (item) { item.group = el.value; item.updatedAt = new Date().toISOString(); queueSave(); }
   }
 });
 
@@ -3252,7 +3258,7 @@ document.addEventListener("keydown", e => {
     e.preventDefault();
     document.execCommand(e.shiftKey ? "outdent" : "indent", false, null);
     const item = personalItems[selectedEntryIndex];
-    if (item) { item.body = el.innerHTML; item.updatedAt = new Date().toLocaleString(); queueSave(); }
+    if (item) { item.body = el.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
   }
   if (el.id === "edit-input") {
     if (e.key === "Enter") { e.preventDefault(); saveTaskEdit(el); }

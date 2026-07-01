@@ -188,10 +188,15 @@
       const projects = Array.isArray(state.projectItems) ? state.projectItems : [];
       const personal = Array.isArray(state.personalItems) ? state.personalItems : [];
 
+      // include created_at/updated_at only when the in-memory value parses,
+      // so unparseable/legacy values leave the DB default (and stored ISO
+      // timestamps round-trip exactly instead of drifting to insert-time).
       const projRows = projects.map((p, i) => ({
         id: String(p.id), user_id: uid, name: p.name || "", status: p.status || "Active",
         owner: p.owner || "", due: p.due || "", notes: p.notes || "", personal: !!p.personal,
         ai: !!p.ai, archived: !!p.archived, is_template: !!p.isTemplate, sort_order: i,
+        ...(toTs(p.createdAt) ? { created_at: toTs(p.createdAt) } : {}),
+        ...(toTs(p.updatedAt) ? { updated_at: toTs(p.updatedAt) } : {}),
       }));
       await reconcile("projects", projRows, "id");
 
@@ -199,12 +204,15 @@
       projects.forEach((p) => (p.todos || []).forEach((t, i) => todoRows.push({
         id: String(t.id), user_id: uid, project_id: String(p.id), body: t.text || "",
         completed: !!t.completed, urgency: t.urgency || "medium", notes: t.notes || "", sort_order: i,
+        ...(toTs(t.createdAt) ? { created_at: toTs(t.createdAt) } : {}),
       })));
       await reconcile("project_todos", todoRows, "id");
 
       const noteRows = personal.map((n, i) => ({
         id: String(n.id), user_id: uid, title: n.title || "", body: n.body || "",
         grp: n.group || "", archived: !!n.archived, sort_order: i,
+        ...(toTs(n.createdAt) ? { created_at: toTs(n.createdAt) } : {}),
+        ...(toTs(n.updatedAt) ? { updated_at: toTs(n.updatedAt) } : {}),
       }));
 
       const keys = new Set([
@@ -251,8 +259,11 @@
 
     async markInboxRouted(id) {
       if (id == null) return;
-      processedInboxIds.add(String(id));
-      try { await client.from("inbox").update({ routed: true }).eq("id", id); } catch (e) { /* retry next load */ }
+      // Only remember it as routed if the DB write actually succeeded; on
+      // failure, leave it unmarked so the next load retries (the app's dedup
+      // guard prevents a duplicate to-do in the meantime).
+      const { error } = await client.from("inbox").update({ routed: true }).eq("id", id);
+      if (!error) processedInboxIds.add(String(id));
     },
 
     alreadyRouted(id) {

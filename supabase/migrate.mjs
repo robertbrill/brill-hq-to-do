@@ -185,7 +185,13 @@ async function main() {
       storage_path: storagePath, content_text: f.text || "", uploaded_at: toTs(f.uploadedAt),
     });
     const { error } = await supabase.from("files").upsert(row, { onConflict: "id" });
-    if (error) { console.warn(`  • files row failed (${f.name}): ${error.message}`); continue; }
+    if (error) {
+      // e.g. an FK violation (note/project was deleted) — remove the blob we
+      // just uploaded so it doesn't orphan in Storage with no row pointing at it.
+      console.warn(`  • files row failed (${f.name}): ${error.message}`);
+      await supabase.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+      continue;
+    }
     uploaded++;
   }
   console.log(`✓ files: ${uploaded} uploaded${missing ? `, ${missing} blob(s) missing` : ""}`);

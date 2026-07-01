@@ -118,6 +118,8 @@ Locally, `/config.js` is served as the static file; on Vercel it's the function.
 - **AI intake (`add-todo.sh`).** The old CLI posts to the Mac server. To keep AI
   task intake working against the cloud, insert into the Supabase `inbox` table
   instead (see `BrillDB.addInbox` for the shape). Not wired yet.
-- **`updated_at` on edits.** Saves don't bump `updated_at` (to avoid marking every
-  row "edited" on each full sync). Add a Postgres `updated_at = now()` trigger if
-  you want live edit timestamps.
+- **Timestamps in unusual locales.** Migrated `created_at`/`updated_at` are parsed
+  from the old app's stored values; if the Mac's locale wrote a non-US date string
+  the migrator can't parse, that row falls back to the DB default (migration time).
+  New edits in the cloud app store ISO timestamps, so this only affects pre-existing
+  data and only the displayed date, never the content.
