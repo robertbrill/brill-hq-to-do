@@ -17,11 +17,11 @@
      SUPABASE_URL=https://xxxx.supabase.co \
      SUPABASE_ANON_KEY=eyJ... \
      MIGRATE_EMAIL=you@example.com \
-     MIGRATE_PASSWORD='your-password' \
-     DATA_DIR=/path/to/ai-brill-todo \
      node supabase/migrate.mjs
 
-   DATA_DIR defaults to the current directory. Safe to re-run: projects,
+   The script prompts for your password (hidden input) so it never lands in the
+   command line or shell history. Set MIGRATE_PASSWORD in the env to skip the
+   prompt. DATA_DIR defaults to the current directory. Safe to re-run: projects,
    to-dos, notes, task-overrides and files upsert by id; only inbox rows
    (which have auto-generated ids) would duplicate on a second run.
    ===================================================================== */
@@ -29,6 +29,7 @@
 import { createClient } from "@supabase/supabase-js";
 import fs from "node:fs";
 import path from "node:path";
+import readline from "node:readline";
 
 const {
   SUPABASE_URL,
@@ -43,7 +44,37 @@ const BUCKET = "uploads";
 function die(msg) { console.error("✗ " + msg); process.exit(1); }
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) die("SUPABASE_URL and SUPABASE_ANON_KEY are required.");
-if (!MIGRATE_EMAIL || !MIGRATE_PASSWORD) die("MIGRATE_EMAIL and MIGRATE_PASSWORD are required (your app login).");
+if (!MIGRATE_EMAIL) die("MIGRATE_EMAIL is required (your app login email).");
+
+// Read the password without echoing it, so it never lands in the command line,
+// shell history, or the process list. Falls back to the MIGRATE_PASSWORD env var.
+function promptHidden(query) {
+  return new Promise((resolve, reject) => {
+    if (!process.stdin.isTTY) {
+      reject(new Error("no interactive terminal available to prompt for a password"));
+      return;
+    }
+    process.stdout.write(query);
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    rl._writeToOutput = () => {};   // mute the echo of typed characters
+    rl.question("", (answer) => {
+      rl.close();
+      process.stdout.write("\n");
+      resolve(answer);
+    });
+  });
+}
+
+async function getPassword() {
+  if (MIGRATE_PASSWORD) return MIGRATE_PASSWORD;
+  if (!process.stdin.isTTY) {
+    die("MIGRATE_PASSWORD is not set and there's no interactive terminal to prompt. " +
+        "Set MIGRATE_PASSWORD, or run this in a terminal to be prompted.");
+  }
+  const pw = await promptHidden(`Password for ${MIGRATE_EMAIL}: `);
+  if (!pw) die("No password entered.");
+  return pw;
+}
 
 function readJson(name, fallback) {
   const p = path.join(DATA_DIR, name);
@@ -76,9 +107,10 @@ function clean(obj) {
 async function main() {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
 
+  const password = await getPassword();
   console.log(`→ Signing in as ${MIGRATE_EMAIL} …`);
   const { data: auth, error: authErr } = await supabase.auth.signInWithPassword({
-    email: MIGRATE_EMAIL, password: MIGRATE_PASSWORD,
+    email: MIGRATE_EMAIL, password,
   });
   if (authErr) die("Sign-in failed: " + authErr.message);
   const userId = auth.session.user.id;
