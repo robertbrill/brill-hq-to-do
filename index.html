@@ -1020,6 +1020,18 @@
   }
   .global-search-btn:hover { background: var(--hover); }
   .gs-kbd { font-size: 11px; color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+  .sidebar-search {
+    display: flex; align-items: center; gap: 7px; width: 100%; box-sizing: border-box;
+    border: 1px solid var(--border-strong); background: var(--bg);
+    border-radius: 8px; padding: 6px 9px; margin: 2px 0 8px; cursor: text;
+  }
+  .sidebar-search:focus-within { border-color: var(--blue); }
+  .sidebar-search .ss-icon { font-size: 13px; line-height: 1; color: var(--muted); }
+  .sidebar-search input {
+    flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+    font: inherit; font-size: 13px; color: var(--text); padding: 0;
+  }
+  .sidebar-search input::placeholder { color: var(--muted); }
   #search-overlay { align-items: flex-start; padding: 10vh 16px 16px; }
   .search-modal {
     background: var(--bg); border-radius: 12px; box-shadow: var(--shadow-card);
@@ -1163,9 +1175,11 @@
     <img src="brill-logo.png" alt="">
     <span>HQ Tasks</span>
   </div>
-  <button class="global-search-btn" data-action="open-search">
-    <span>&#128269; Search everything</span><span class="gs-kbd">&#8984;K</span>
-  </button>
+  <div class="sidebar-search" id="sidebar-search">
+    <span class="ss-icon" aria-hidden="true">&#128269;</span>
+    <input id="sidebar-search-input" type="search" placeholder="Search everything" autocomplete="off" spellcheck="false">
+    <span class="gs-kbd">&#8984;K</span>
+  </div>
   <button class="nav-item current" id="nav-tasks" data-action="nav" data-view="tasks">
     <span class="nav-icon">&#9745;</span> Tasks <span class="nav-count" id="nav-tasks-count"></span>
   </button>
@@ -2458,6 +2472,17 @@ function openSearch() {
 function closeSearch() {
   document.getElementById("search-overlay").classList.remove("open");
 }
+
+// The sidebar search bar launches the full-screen search palette (the overlay
+// covers the sidebar, so typing happens in the palette input). Focusing or
+// clicking the bar opens it with the cursor ready.
+(function wireSidebarSearch() {
+  const box = document.getElementById("sidebar-search");
+  const inp = document.getElementById("sidebar-search-input");
+  if (!box || !inp) return;
+  inp.addEventListener("focus", () => openSearch());
+  box.addEventListener("click", () => inp.focus());
+})();
 
 const SEARCH_GROUP_LIMIT = 6;
 
