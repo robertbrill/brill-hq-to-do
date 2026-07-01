@@ -1,0 +1,11 @@
+# Files that must NOT be publicly served by Vercel. They stay in the repo for
+# history, but the deployed site is only the authenticated cloud app.
+#
+# todo-data.js  — base task list with real names/emails/phones (now served,
+#                 behind login, by api/base-tasks.js instead).
+# todo-v2.html  — the old app: no auth gate, would expose the base tasks.
+# todo-server.py / add-todo.sh — the old Mac server + CLI (server-only, N/A here).
+todo-data.js
+todo-v2.html
+todo-server.py
+add-todo.sh

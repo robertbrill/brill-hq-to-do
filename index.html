@@ -1325,15 +1325,19 @@
      Locally (Mac dev), it's the git-ignored static config.js file. -->
 <script src="/config.js"></script>
 <script src="/supabase-db.js"></script>
-<script src="todo-data.js?v=20260416b"></script>
 <script>
 /* =====================================================================
    Brill HQ v2 — Notion-style redesign (cloud edition).
    Backed by Supabase via BrillDB (supabase-db.js): the same in-memory state
    is reconstructed from normalized tables on load and written back on save.
-   The base task list still comes from the static todo-data.js; per-task
-   changes are stored as task_overrides. Requires a signed-in session (RLS).
+   The base task list is loaded after login from the api/base-tasks endpoint
+   (it holds PII, so it's never a public file); per-task changes are stored as
+   task_overrides. Requires a signed-in session (RLS).
    ===================================================================== */
+
+// Base task sections, fetched after auth from /api/base-tasks (replaces the
+// old public todo-data.js). Empty until loadBaseTasks() populates it.
+let TODO_DATA = [];
 
 const INBOX_POLL_MS = 10000;
 
@@ -1570,6 +1574,12 @@ async function loadInbox() {
   try {
     inboxItems = await BrillDB.loadInbox();
   } catch (e) { /* keep what we have */ }
+}
+
+async function loadBaseTasks() {
+  try {
+    TODO_DATA = await BrillDB.loadBaseTasks();
+  } catch (e) { TODO_DATA = []; }
 }
 
 /* Inbox items that carry a "project" field (e.g. added by AI through the API)
@@ -3365,7 +3375,7 @@ window.addEventListener("drop", e => { if (dragHasFiles(e)) e.preventDefault(); 
 /* ---------- init ---------- */
 
 async function init() {
-  await Promise.all([loadRemoteState(), loadInbox()]);
+  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks()]);
   routeInboxItems();
   // give every note a stable id so files can attach to it across sessions;
   // legacy notes use a deterministic id so two devices can't diverge

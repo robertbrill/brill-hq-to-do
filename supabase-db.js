@@ -125,6 +125,23 @@
       if (client) client.auth.onAuthStateChange((_event, session) => cb(session));
     },
 
+    // Base task list (formerly the public todo-data.js). Now served only to a
+    // signed-in user by the api/base-tasks function, which we call with the
+    // session's access token. Returns [] if unauthenticated or on any error.
+    async loadBaseTasks() {
+      const { data } = await client.auth.getSession();
+      const token = data && data.session ? data.session.access_token : null;
+      if (!token) return [];
+      try {
+        const res = await fetch("/api/base-tasks", { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return [];
+        const json = await res.json();
+        return Array.isArray(json) ? json : [];
+      } catch (e) {
+        return [];
+      }
+    },
+
     // Let the app hand us current project/note names so file rows can display
     // "attached to <name>" without an extra join.
     setContext(projects, notes) {

@@ -106,11 +106,10 @@ Locally, `/config.js` is served as the static file; on Vercel it's the function.
 
 ## Known follow-ups (not blockers)
 
-- **`todo-data.js` is served publicly.** The base task list (with names, emails,
-  phone numbers) loads *before* login as a static file, so anyone with the Vercel
-  URL could read it. Options: (a) move the base tasks into a DB table behind auth,
-  (b) drop the static Tasks view, or (c) add Vercel Deployment Protection. See the
-  README note — decide before sharing the URL widely.
+- ~~`todo-data.js` is served publicly.~~ **Resolved.** The base task list is now
+  served only to a signed-in user by `api/base-tasks.js` (it verifies the Supabase
+  access token before returning anything), and the old public `todo-data.js` /
+  `todo-v2.html` are excluded from the deploy via `.vercelignore`.
 - **In-file search for PDF/Word/Excel.** The old Python server extracted text
   from binary docs; the browser version only full-text-indexes plain-text files.
   Images and text files still upload and search by name. Adding pdf.js/mammoth is

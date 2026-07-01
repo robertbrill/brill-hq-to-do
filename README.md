@@ -46,11 +46,10 @@ public internet, protected by a Supabase **login + Row-Level Security** (every r
 owned by `auth.uid()`). Full setup, deploy and data-migration steps are in
 [`supabase/MIGRATION.md`](supabase/MIGRATION.md).
 
-> ⚠️ **Before sharing the Vercel URL:** `todo-data.js` (the static base task list,
-> which contains names/emails/phone numbers) is served *before* login as a static
-> file, so it's readable by anyone with the URL. Decide how to handle it — move the
-> base tasks behind auth, drop the static Tasks view, or enable Vercel Deployment
-> Protection. See the follow-ups in `supabase/MIGRATION.md`.
+The base task list (which contains names/emails/phone numbers) is **not** a public
+file. It's served only to a signed-in user by `api/base-tasks.js`, which verifies
+the caller's Supabase access token before returning anything. The old public
+`todo-data.js` and `todo-v2.html` are excluded from the deploy via `.vercelignore`.
 
 The old `todo-v2.html` + `todo-server.py` keep running on the Mac, untouched, until
 the cloud version is verified.
