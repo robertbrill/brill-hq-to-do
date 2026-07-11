@@ -175,14 +175,14 @@
       const projectItems = (projRes.data || []).map((p) => ({
         id: p.id, name: p.name || "", status: p.status || "Active", owner: p.owner || "",
         due: p.due || "", notes: p.notes || "", personal: !!p.personal, ai: !!p.ai,
-        archived: !!p.archived, isTemplate: !!p.is_template,
+        archived: !!p.archived, isTemplate: !!p.is_template, pinned: !!p.pinned,
         createdAt: toTs(p.created_at) || "", updatedAt: toTs(p.updated_at) || "",
         todos: todosByProject[p.id] || [],
       }));
 
       const personalItems = (noteRes.data || []).map((n) => ({
         id: n.id, title: n.title || "", body: n.body || "", group: n.grp || "",
-        archived: !!n.archived,
+        archived: !!n.archived, pinned: !!n.pinned,
         createdAt: toTs(n.created_at) || "", updatedAt: toTs(n.updated_at) || "",
       }));
 
@@ -211,7 +211,7 @@
       const projRows = projects.map((p, i) => ({
         id: String(p.id), user_id: uid, name: p.name || "", status: p.status || "Active",
         owner: p.owner || "", due: p.due || "", notes: p.notes || "", personal: !!p.personal,
-        ai: !!p.ai, archived: !!p.archived, is_template: !!p.isTemplate, sort_order: i,
+        ai: !!p.ai, archived: !!p.archived, is_template: !!p.isTemplate, pinned: !!p.pinned, sort_order: i,
         ...(toTs(p.createdAt) ? { created_at: toTs(p.createdAt) } : {}),
         ...(toTs(p.updatedAt) ? { updated_at: toTs(p.updatedAt) } : {}),
       }));
@@ -227,7 +227,7 @@
 
       const noteRows = personal.map((n, i) => ({
         id: String(n.id), user_id: uid, title: n.title || "", body: n.body || "",
-        grp: n.group || "", archived: !!n.archived, sort_order: i,
+        grp: n.group || "", archived: !!n.archived, pinned: !!n.pinned, sort_order: i,
         ...(toTs(n.createdAt) ? { created_at: toTs(n.createdAt) } : {}),
         ...(toTs(n.updatedAt) ? { updated_at: toTs(n.updatedAt) } : {}),
       }));

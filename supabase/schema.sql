@@ -15,6 +15,7 @@ create table if not exists projects (
   ai          boolean default false,       -- AI Projects group
   archived    boolean default false,
   is_template boolean default false,
+  pinned      boolean default false,       -- favorited / pinned to the top
   sort_order  double precision default 0,
   created_at  timestamptz default now(),
   updated_at  timestamptz default now()
@@ -42,10 +43,15 @@ create table if not exists notes (
   body        text default '',             -- rich-text HTML
   grp         text default '',             -- group / heading ("group" is a reserved word)
   archived    boolean default false,
+  pinned      boolean default false,       -- favorited / pinned to the top
   sort_order  double precision default 0,
   created_at  timestamptz default now(),
   updated_at  timestamptz default now()
 );
+
+-- For databases created before the "pinned" columns existed (safe to re-run):
+alter table projects add column if not exists pinned boolean default false;
+alter table notes    add column if not exists pinned boolean default false;
 
 -- ============ FILES (metadata; blobs live in the 'uploads' Storage bucket) ============
 create table if not exists files (

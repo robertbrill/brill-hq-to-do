@@ -840,7 +840,7 @@
     outline: none;
   }
   .card-add::placeholder { color: var(--faint); }
-  .entry-item { padding: 7px 10px; border-radius: var(--radius); cursor: pointer; }
+  .entry-item { padding: 7px 10px; border-radius: var(--radius); cursor: pointer; position: relative; }
   .entry-item:hover { background: var(--hover); }
   .entry-item.selected { background: var(--active); }
   .entry-item-title {
@@ -849,10 +849,19 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    padding-right: 18px;
   }
   .entry-item.selected .entry-item-title { font-weight: 600; }
   .entry-item-title.untitled { color: var(--faint); }
-  .entry-item-date { font-size: 11.5px; color: var(--faint); margin-top: 1px; }
+  .entry-item-date { font-size: 11.5px; color: var(--faint); margin-top: 1px; padding-right: 18px; }
+  .entry-item-star {
+    position: absolute; top: 6px; right: 6px; border: 0; background: none; cursor: pointer;
+    font-size: 13px; line-height: 1; padding: 2px; color: var(--faint);
+    opacity: 0; transition: opacity .1s, color .1s;
+  }
+  .entry-item:hover .entry-item-star, .entry-item-star.pinned { opacity: 1; }
+  .entry-item-star.pinned { color: #f5b301; }
+  .entry-item-star:hover { color: #f5b301; }
 
   .entry-title-input {
     width: 100%;
@@ -1473,6 +1482,7 @@ function normalizeProject(p) {
     ai: Boolean(p.ai),
     archived: Boolean(p.archived),
     isTemplate: Boolean(p.isTemplate),
+    pinned: Boolean(p.pinned),
     todos: Array.isArray(p.todos) ? p.todos.map(normalizeTodo).filter(Boolean) : []
   };
 }
@@ -1829,6 +1839,19 @@ function visibleProjects() {
     .filter(p => statusFilter === "all" || statusFilter === "Archived" || (p.status || "Active") === statusFilter);
 }
 
+// Group projects for the sidebar/overview, floating pinned favorites into a
+// "Pinned" group at the very top (and out of their category group).
+function projectGroups(visible) {
+  const pinned = visible.filter(p => p.pinned);
+  const rest = visible.filter(p => !p.pinned);
+  return [
+    { title: "★ Pinned", items: pinned },
+    { title: "AI Projects", items: rest.filter(p => p.ai) },
+    { title: "Work", items: rest.filter(p => !p.personal && !p.ai) },
+    { title: "Personal", items: rest.filter(p => p.personal && !p.ai) }
+  ].filter(g => g.items.length);
+}
+
 function renderProjectsSidebar() {
   const list = document.getElementById("projects-list");
   const all = projects.filter(p => !p.isTemplate);
@@ -1847,11 +1870,7 @@ function renderProjectsSidebar() {
     return;
   }
 
-  const groups = [
-    { title: "AI Projects", items: visible.filter(p => p.ai) },
-    { title: "Work", items: visible.filter(p => !p.personal && !p.ai) },
-    { title: "Personal", items: visible.filter(p => p.personal && !p.ai) }
-  ].filter(g => g.items.length);
+  const groups = projectGroups(visible);
 
   list.innerHTML = overviewHtml + groups.map(g => `
     <div class="psb-group">${g.title}</div>
@@ -1860,6 +1879,7 @@ function renderProjectsSidebar() {
       return `<div class="entry-item ${!projectsOverview && String(p.id) === String(activeProjectId) ? "selected" : ""}" data-action="open-project" data-id="${escHtml(p.id)}">
         <div class="entry-item-title ${p.name ? "" : "untitled"}">${escHtml(p.name || "Untitled")}</div>
         <div class="entry-item-date">${escHtml(p.status || "Active")}${total ? ` &middot; ${done}/${total} done` : ""}</div>
+        <button class="entry-item-star ${p.pinned ? "pinned" : ""}" data-action="toggle-pin-project" data-id="${escHtml(p.id)}" title="${p.pinned ? "Unpin" : "Pin to top"}">${p.pinned ? "&#9733;" : "&#9734;"}</button>
       </div>`;
     }).join("")}`).join("");
 }
@@ -1923,11 +1943,7 @@ function renderProjectsOverview() {
     (p.name || "").toLowerCase().includes(q) ||
     p.todos.some(t => !t.completed && ((t.text || "").toLowerCase().includes(q) || (t.notes || "").toLowerCase().includes(q)));
   const visible = visibleProjects().filter(matchesQ);
-  const groups = [
-    { title: "AI Projects", items: visible.filter(p => p.ai) },
-    { title: "Work", items: visible.filter(p => !p.personal && !p.ai) },
-    { title: "Personal", items: visible.filter(p => p.personal && !p.ai) }
-  ].filter(g => g.items.length);
+  const groups = projectGroups(visible);
 
   body.innerHTML = `
     <div class="page-title">Projects</div>
@@ -2121,7 +2137,9 @@ function renderEntriesList() {
   // flat list of the selected group within the current Active/Archived tab
   const shown = personalItems
     .map((item, i) => ({ item, i }))
-    .filter(({ item }) => noteMatchesView(item));
+    .filter(({ item }) => noteMatchesView(item))
+    // pinned favorites float to the top (stable sort keeps the rest in order)
+    .sort((a, b) => (b.item.pinned ? 1 : 0) - (a.item.pinned ? 1 : 0));
   document.getElementById("entries-count").textContent = shown.length ? `· ${shown.length}` : "";
   document.getElementById("notes-active-tab").classList.toggle("current", !showArchivedNotes);
   document.getElementById("notes-archived-tab").classList.toggle("current", showArchivedNotes);
@@ -2133,6 +2151,7 @@ function renderEntriesList() {
     <div class="entry-item ${i === selectedEntryIndex ? "selected" : ""}" data-action="select-entry" data-idx="${i}">
       <div class="entry-item-title ${item.title ? "" : "untitled"}">${escHtml(item.title || "Untitled")}</div>
       <div class="entry-item-date">${escHtml(formatEntryDate(item.updatedAt || item.createdAt))}</div>
+      <button class="entry-item-star ${item.pinned ? "pinned" : ""}" data-action="toggle-pin-note" data-idx="${i}" title="${item.pinned ? "Unpin" : "Pin to top"}">${item.pinned ? "&#9733;" : "&#9734;"}</button>
     </div>`).join("");
 }
 
@@ -2896,6 +2915,25 @@ function savePtodoEdit(input) {
 
 /* ---------- event delegation ---------- */
 
+function togglePinProject(id) {
+  const p = findProject(id);
+  if (!p) return;
+  p.pinned = !p.pinned;
+  queueSave();
+  renderProjectsSidebar();
+  if (projectsOverview) renderProjectsMain();
+  showToast(p.pinned ? "Pinned to top" : "Unpinned");
+}
+
+function togglePinNote(idx) {
+  const item = personalItems[idx];
+  if (!item) return;
+  item.pinned = !item.pinned;
+  queueSave();
+  renderPersonal();
+  showToast(item.pinned ? "Pinned to top" : "Unpinned");
+}
+
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-action]");
   if (!el) return;
@@ -2909,6 +2947,8 @@ document.addEventListener("click", e => {
     if (projectsOverview) renderProjectsMain();
   }
   if (a === "overview") { setOverview(true); renderProjectsMain(); renderProjectsSidebar(); }
+  if (a === "toggle-pin-project") togglePinProject(el.dataset.id);
+  if (a === "toggle-pin-note") togglePinNote(Number(el.dataset.idx));
   if (a === "toggle-card-todo") toggleCardTodo(el.dataset.pid, el.dataset.tid);
   if (a === "toggle-section") {
     const id = el.dataset.section;
