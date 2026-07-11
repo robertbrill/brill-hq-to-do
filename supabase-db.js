@@ -186,15 +186,16 @@
         createdAt: toTs(n.created_at) || "", updatedAt: toTs(n.updated_at) || "",
       }));
 
-      const completed = {}, edits = {}, notes = {}, deleted = {};
+      const completed = {}, edits = {}, notes = {}, deleted = {}, archived = {};
       (ovrRes.data || []).forEach((o) => {
         if (o.completed) completed[o.task_key] = true;
         if (o.edited_text) edits[o.task_key] = o.edited_text;
         if (o.note) notes[o.task_key] = o.note;
         if (o.deleted) deleted[o.task_key] = true;
+        if (o.archived) archived[o.task_key] = true;
       });
 
-      return { completed, edits, notes, deleted, projectItems, personalItems };
+      return { completed, edits, notes, deleted, archived, projectItems, personalItems };
     },
 
     // Full normalized sync of the in-memory state. Order matters: projects
@@ -235,6 +236,7 @@
       const keys = new Set([
         ...Object.keys(state.completed || {}), ...Object.keys(state.edits || {}),
         ...Object.keys(state.notes || {}), ...Object.keys(state.deleted || {}),
+        ...Object.keys(state.archived || {}),
       ]);
       const ovrRows = [...keys].map((k) => ({
         user_id: uid, task_key: k,
@@ -242,6 +244,7 @@
         edited_text: (state.edits || {})[k] || null,
         note: (state.notes || {})[k] || null,
         deleted: !!(state.deleted || {})[k],
+        archived: !!(state.archived || {})[k],
       }));
 
       await Promise.all([

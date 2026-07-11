@@ -92,8 +92,10 @@ create table if not exists task_overrides (
   edited_text text,
   note        text,
   deleted     boolean default false,
+  archived    boolean default false,       -- hidden from the active Tasks view, kept under "Archived"
   primary key (user_id, task_key)
 );
+alter table task_overrides add column if not exists archived boolean default false;
 
 -- ============ ROW LEVEL SECURITY ============
 alter table projects       enable row level security;

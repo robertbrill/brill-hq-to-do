@@ -1256,11 +1256,13 @@
       <button class="tab current" data-action="filter" data-filter="active">Active</button>
       <button class="tab" data-action="filter" data-filter="completed">Completed</button>
       <button class="tab" data-action="filter" data-filter="all">All</button>
+      <button class="tab" data-action="filter" data-filter="archived">Archived</button>
       <div class="controls-spacer"></div>
       <input class="search-input" id="search-input" type="search" placeholder="Search&hellip;">
       <div class="menu-wrap">
         <button class="icon-btn" data-action="toggle-menu" title="More options">&#8943;</button>
         <div class="menu">
+          <button data-action="archive-all-tasks">&#128230; Archive all remaining</button>
           <button class="danger" data-action="start-delete" data-scope="tasks">Delete tasks&hellip;</button>
         </div>
       </div>
@@ -1382,6 +1384,7 @@ let completed = {};
 let edits = {};
 let notes = {};
 let deleted = {};
+let archived = {};
 let projects = [];
 let inboxItems = [];
 let personalItems = [];
@@ -1504,6 +1507,7 @@ async function loadRemoteState() {
     edits = data.edits;
     notes = data.notes;
     deleted = data.deleted;
+    archived = data.archived || {};
     projects = data.projectItems.map(normalizeProject);
     personalItems = data.personalItems.filter(i => i && typeof i === "object");
     remoteLoaded = true;
@@ -1516,7 +1520,7 @@ async function loadRemoteState() {
 
 // the object the app persists; also the source of the sync signature
 function saveStateObj() {
-  return { completed, edits, notes, deleted, projectItems: projects, personalItems };
+  return { completed, edits, notes, deleted, archived, projectItems: projects, personalItems };
 }
 
 function savePayload() {
@@ -1527,6 +1531,7 @@ function savePayload() {
 function serverPayloadOf(data) {
   return JSON.stringify({
     completed: data.completed || {}, edits: data.edits || {}, notes: data.notes || {}, deleted: data.deleted || {},
+    archived: data.archived || {},
     projectItems: Array.isArray(data.projectItems) ? data.projectItems : [],
     personalItems: Array.isArray(data.personalItems) ? data.personalItems : [],
   });
@@ -1570,6 +1575,7 @@ async function maybeSyncState() {
     edits = data.edits;
     notes = data.notes;
     deleted = data.deleted;
+    archived = data.archived || {};
     projects = data.projectItems.map(normalizeProject);
     personalItems = data.personalItems.filter(i => i && typeof i === "object");
     personalItems.forEach(n => { if (n && !n.id) n.id = legacyNoteId(n); });
@@ -1692,7 +1698,7 @@ function renderNav() {
   getAllSections().forEach(section => {
     section.items.forEach((_, i) => {
       const key = taskKey(section.id, i);
-      if (deleted[key]) return;
+      if (deleted[key] || archived[key]) return;
       total++;
       if (completed[key]) done++;
     });
@@ -1760,9 +1766,12 @@ function taskRowHtml(section, idx) {
     <div class="checkbox ${isDone ? "checked" : ""}" data-action="toggle-task" data-key="${escHtml(key)}"></div>
     <div class="task-body">${body}</div>
     <div class="task-actions">
-      <button class="icon-btn" data-action="toggle-notes" data-key="${escHtml(key)}">${notesOpen ? "Hide note" : (hasNotes ? "Note" : "+ Note")}</button>
+      ${archived[key]
+        ? `<button class="icon-btn" data-action="archive-task" data-key="${escHtml(key)}">&#8617; Restore</button>`
+        : `<button class="icon-btn" data-action="toggle-notes" data-key="${escHtml(key)}">${notesOpen ? "Hide note" : (hasNotes ? "Note" : "+ Note")}</button>
       <button class="icon-btn" data-action="assign-project" data-key="${escHtml(key)}">&rarr; Project</button>
       <button class="icon-btn" data-action="edit-task" data-key="${escHtml(key)}">Edit</button>
+      <button class="icon-btn" data-action="archive-task" data-key="${escHtml(key)}">Archive</button>`}
     </div>
   </div>`;
 }
@@ -1788,9 +1797,14 @@ function renderTasks() {
     section.items.forEach((item, idx) => {
       const key = taskKey(section.id, idx);
       if (deleted[key]) return;
-      const isDone = !!completed[key];
-      if (taskFilter === "active" && isDone) return;
-      if (taskFilter === "completed" && !isDone) return;
+      if (taskFilter === "archived") {
+        if (!archived[key]) return;           // Archived tab shows only archived tasks
+      } else {
+        if (archived[key]) return;            // every other tab hides archived tasks
+        const isDone = !!completed[key];
+        if (taskFilter === "active" && isDone) return;
+        if (taskFilter === "completed" && !isDone) return;
+      }
       const text = (edits[key] || item || "").toLowerCase();
       const note = (notes[key] || "").toLowerCase();
       if (q && !text.includes(q) && !note.includes(q)) return;
@@ -1812,7 +1826,8 @@ function renderTasks() {
 
   if (!shown) {
     html = `<div class="empty-note">${q ? "No tasks match your search." :
-      taskFilter === "completed" ? "Nothing completed yet." : "All clear &mdash; no open tasks. &#127881;"}</div>`;
+      taskFilter === "completed" ? "Nothing completed yet." :
+      taskFilter === "archived" ? "No archived tasks." : "All clear &mdash; no open tasks. &#127881;"}</div>`;
   }
   container.innerHTML = (deleteMode === "tasks" ? deleteBarHtml() : "") + html;
 
@@ -2612,6 +2627,32 @@ function toggleTask(key) {
   render();
 }
 
+function toggleArchiveTask(key) {
+  if (archived[key]) delete archived[key];
+  else { archived[key] = true; expandedNotes.delete(key); }
+  queueSave();
+  render();
+}
+
+// Sweep every remaining open task (not done, deleted, or already archived) into
+// the Archived tab. Used to clear out the leftover base task list.
+function archiveAllTasks() {
+  const keys = [];
+  getAllSections().forEach(section => {
+    section.items.forEach((_, idx) => {
+      const key = taskKey(section.id, idx);
+      if (deleted[key] || archived[key] || completed[key]) return;
+      keys.push(key);
+    });
+  });
+  if (!keys.length) { showToast("No open tasks left to archive"); return; }
+  if (!confirm(`Archive ${keys.length} open task${keys.length === 1 ? "" : "s"}? Find them anytime under the Archived tab.`)) return;
+  keys.forEach(key => { archived[key] = true; });
+  queueSave();
+  showToast(`Archived ${keys.length} task${keys.length === 1 ? "" : "s"}`);
+  render();
+}
+
 function saveTaskEdit(input) {
   const key = input.dataset.key;
   const val = input.value.trim();
@@ -2960,6 +3001,11 @@ document.addEventListener("click", e => {
   }
   if (a === "toggle-task") toggleTask(el.dataset.key);
   if (a === "edit-task") { editingTaskKey = el.dataset.key; renderTasks(); }
+  if (a === "archive-task") toggleArchiveTask(el.dataset.key);
+  if (a === "archive-all-tasks") {
+    document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    archiveAllTasks();
+  }
   if (a === "toggle-menu") {
     const menu = el.closest(".menu-wrap").querySelector(".menu");
     const wasOpen = menu.classList.contains("open");
