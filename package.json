@@ -1,0 +1,11 @@
+{
+  "name": "brill-hq-to-do",
+  "private": true,
+  "description": "Brill HQ — static app + Vercel functions (assistant chat, reminder push).",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0",
+    "@supabase/supabase-js": "^2.45.4",
+    "web-push": "^3.6.7"
+  }
+}

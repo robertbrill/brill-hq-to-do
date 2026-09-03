@@ -7,6 +7,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="512x512" href="favicon-512.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="HQ Tasks">
+<meta name="theme-color" content="#f7f7f5">
 <style>
   :root {
     --bg: #ffffff;
@@ -1069,6 +1074,82 @@
   .search-more { font-size: 12px; color: var(--faint); padding: 4px 10px 8px; }
 
   /* ============ Mobile ============ */
+  /* ============ Assistant (chat intake) ============ */
+  #page-assistant.visible { display: flex; flex-direction: column; min-height: 100%; padding-bottom: 24px; }
+  .chat-log { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 4px 0 18px; }
+  .chat-msg { display: flex; flex-direction: column; max-width: 85%; }
+  .chat-msg.user { align-self: flex-end; align-items: flex-end; }
+  .chat-msg.assistant { align-self: flex-start; }
+  .chat-bubble { padding: 10px 14px; border-radius: 14px; font-size: 14.5px; line-height: 1.45; word-break: break-word; }
+  .chat-msg.user .chat-bubble { background: var(--blue); color: #fff; border-bottom-right-radius: 4px; }
+  .chat-msg.assistant .chat-bubble { background: var(--sidebar); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .chat-msg.error .chat-bubble { background: var(--pill-red-bg); color: var(--pill-red-tx); border-color: transparent; }
+  .chat-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chat-chip {
+    border: 1px solid var(--border-strong); background: #fff; color: var(--text);
+    font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 12px; text-align: left; cursor: default;
+  }
+  button.chat-chip { cursor: pointer; }
+  button.chat-chip:hover { background: var(--hover); border-color: var(--blue); }
+  .chat-chip.failed { background: var(--pill-red-bg); color: var(--pill-red-tx); border-color: transparent; }
+  .chat-empty { padding: 30px 0 10px; }
+  .chat-empty-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .chat-empty-sub { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  .chat-suggest { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chat-notice { background: var(--pill-yellow-bg); color: var(--pill-yellow-tx); padding: 10px 14px; border-radius: var(--radius); font-size: 13.5px; }
+  .chat-notice code { font-size: 12.5px; }
+  .typing span { display: inline-block; width: 6px; height: 6px; margin: 0 2px; border-radius: 50%; background: var(--faint); animation: chat-blink 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: .2s; }
+  .typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes chat-blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+  .chat-composer {
+    position: sticky; bottom: 0; display: flex; align-items: flex-end; gap: 8px;
+    padding: 10px 12px; background: #fff; border: 1px solid var(--border-strong); border-radius: 14px;
+    box-shadow: 0 -10px 24px rgba(255, 255, 255, .95), 0 2px 10px rgba(0, 0, 0, .05);
+  }
+  .chat-composer:focus-within { border-color: var(--blue); box-shadow: 0 -10px 24px rgba(255, 255, 255, .95), 0 0 0 3px var(--blue-soft); }
+  .chat-composer textarea {
+    flex: 1; border: none; outline: none; resize: none; font: inherit; font-size: 15px; line-height: 1.4;
+    max-height: 200px; padding: 6px 4px; background: transparent; color: var(--text);
+  }
+  .chat-composer textarea::placeholder { color: var(--faint); }
+  .chat-send { border: none; background: var(--blue); color: #fff; font: inherit; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+  .chat-send:hover { background: #1a73cd; }
+  .chat-mic { border: 1px solid var(--border-strong); background: transparent; font-size: 16px; line-height: 1; padding: 7px 9px; border-radius: 10px; cursor: pointer; }
+  .chat-mic:hover { background: var(--hover); }
+  .chat-mic.listening { background: var(--pill-red-bg); border-color: #eb5757; animation: chat-blink 1.2s infinite; }
+  .chat-hint { font-size: 12px; color: var(--faint); margin-top: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .chat-hint button { border: none; background: none; color: var(--faint); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0; }
+  .chat-hint button:hover { color: var(--text); }
+
+  /* ============ Reminders ============ */
+  .push-card {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 14px; margin-bottom: 22px;
+    background: var(--sidebar); border: 1px solid var(--border); border-radius: 10px; font-size: 13.5px; color: var(--muted);
+  }
+  .push-card .push-text { flex: 1; min-width: 200px; line-height: 1.4; }
+  .push-card .push-text b { color: var(--text); }
+  .rem-section { margin-bottom: 26px; }
+  .rem-section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint);
+    padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px;
+  }
+  .rem-section-title span { font-weight: 400; }
+  .rem-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 6px; border-bottom: 1px solid var(--border); }
+  .rem-row:last-child { border-bottom: none; }
+  .rem-row:hover { background: var(--hover); border-radius: var(--radius); }
+  .rem-row:hover .task-actions { opacity: 1; }
+  .rem-body { flex: 1; min-width: 0; }
+  .rem-title { font-size: 15px; word-break: break-word; }
+  .rem-row.done .rem-title { color: var(--faint); text-decoration: line-through; }
+  .rem-when { font-size: 12.5px; color: var(--muted); margin-top: 2px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .rem-row.due .rem-when { color: #c4554d; font-weight: 500; }
+  .rem-notes { font-size: 13px; color: var(--muted); margin-top: 3px; white-space: pre-wrap; }
+  .rem-actions { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
+  .rem-done { margin-top: 10px; }
+  .rem-done summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 4px 0; }
+  .quick-add input[type="datetime-local"] { border: none; outline: none; font: inherit; font-size: 13px; color: var(--muted); background: transparent; }
+
   @media (max-width: 760px) {
     body { flex-direction: column; }
     .sidebar {
@@ -1123,6 +1204,11 @@
     .prop-label { width: 90px; min-width: 90px; }
     .entries-sidebar.open { position: static; width: 100%; min-width: 0; height: auto; max-height: 32vh; border-right: none; border-bottom: 1px solid var(--border); }
     .entry-title-input { font-size: 26px; }
+    .chat-msg { max-width: 95%; }
+    #reminder-form { flex-wrap: wrap; }
+    #reminder-form input[type="text"] { flex: 1 1 100%; }
+    .rem-row { flex-wrap: wrap; }
+    .rem-actions { margin-left: auto; }
   }
 </style>
 </head>
@@ -1189,6 +1275,9 @@
     <input id="sidebar-search-input" type="search" placeholder="Search everything" autocomplete="off" spellcheck="false">
     <span class="gs-kbd">&#8984;K</span>
   </div>
+  <button class="nav-item" id="nav-assistant" data-action="nav" data-view="assistant">
+    <span class="nav-icon">&#128172;</span> Assistant
+  </button>
   <button class="nav-item current" id="nav-tasks" data-action="nav" data-view="tasks">
     <span class="nav-icon">&#9745;</span> Tasks <span class="nav-count" id="nav-tasks-count"></span>
   </button>
@@ -1201,6 +1290,9 @@
   <div class="note-groups-nav" id="note-groups-nav"></div>
   <button class="nav-item" id="nav-files" data-action="nav" data-view="files">
     <span class="nav-icon">&#128206;</span> Files <span class="nav-count" id="nav-files-count"></span>
+  </button>
+  <button class="nav-item" id="nav-reminders" data-action="nav" data-view="reminders">
+    <span class="nav-icon">&#9200;</span> Reminders <span class="nav-count" id="nav-reminders-count"></span>
   </button>
   <div class="sidebar-footer" id="sidebar-stats"></div>
   <button class="signout-btn" id="signout-btn" data-action="sign-out">&#8617; Sign out</button>
@@ -1292,6 +1384,40 @@
       <input id="file-search-input" type="search" placeholder="Search file names &amp; contents&hellip;" autocomplete="off">
     </div>
     <div id="files-table"></div>
+  </div>
+
+  <!-- ============ ASSISTANT ============ -->
+  <div class="page" id="page-assistant">
+    <div class="page-title">Assistant</div>
+    <div class="page-subtitle">Talk to it like a person &mdash; it files tasks, projects, long notes and reminders for you.</div>
+    <div class="chat-log" id="chat-log"></div>
+    <form class="chat-composer" id="chat-form">
+      <textarea id="chat-input" rows="1" placeholder="e.g. Remind me Friday at 9am to send the BSH invoice, and add a task to call Brad" autocomplete="off"></textarea>
+      <button type="button" class="chat-mic" id="chat-mic" title="Dictate" hidden>&#127908;</button>
+      <button type="submit" class="chat-send">Send</button>
+    </form>
+    <div class="chat-hint">Enter to send &middot; Shift+Enter for a new line &middot; <button type="button" data-action="chat-clear">Clear conversation</button></div>
+  </div>
+
+  <!-- ============ REMINDERS ============ -->
+  <div class="page" id="page-reminders">
+    <div class="page-title">Reminders</div>
+    <div class="page-subtitle" id="reminders-subtitle"></div>
+    <div class="push-card" id="push-card"></div>
+    <form class="quick-add" id="reminder-form">
+      <span class="plus">&#9200;</span>
+      <input type="text" id="reminder-title" placeholder="Remind me to&hellip;" autocomplete="off">
+      <input type="datetime-local" id="reminder-when">
+      <select id="reminder-repeat">
+        <option value="none" selected>Once</option>
+        <option value="daily">Daily</option>
+        <option value="weekdays">Weekdays</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+      <button class="add-btn" type="submit">Add</button>
+    </form>
+    <div id="reminders-list"></div>
   </div>
 
 </main>
@@ -1559,7 +1685,8 @@ function queueSave() {
 // stays current (and can't silently overwrite newer data with a stale save).
 function isEditingSomething() {
   const ae = document.activeElement;
-  if (ae && (ae.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(ae.tagName))) return true;
+  if (ae && ae.id === "chat-input" && !ae.value) { /* an empty chat box isn't an edit in progress */ }
+  else if (ae && (ae.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(ae.tagName))) return true;
   if (document.querySelector(".modal-overlay.open, #image-lightbox.open")) return true;
   return !!deleteMode;
 }
@@ -1693,6 +1820,8 @@ function renderNav() {
   document.getElementById("nav-projects").classList.toggle("current", view === "projects");
   document.getElementById("nav-personal").classList.toggle("current", view === "personal");
   document.getElementById("nav-files").classList.toggle("current", view === "files");
+  document.getElementById("nav-assistant").classList.toggle("current", view === "assistant");
+  document.getElementById("nav-reminders").classList.toggle("current", view === "reminders");
 
   let total = 0, done = 0;
   getAllSections().forEach(section => {
@@ -1707,6 +1836,8 @@ function renderNav() {
   document.getElementById("nav-projects-count").textContent =
     projects.filter(p => !p.isTemplate && (p.status || "Active") === "Active").length;
   document.getElementById("nav-personal-count").textContent = personalItems.filter(i => !i.archived).length;
+  const pendingCount = pendingReminders().length + deliveredReminders().length;
+  document.getElementById("nav-reminders-count").textContent = pendingCount || "";
   renderNoteGroupsNav();   // show the group list under Long Notes (hidden in other views)
   document.getElementById("sidebar-stats").textContent = `${total - done} open · ${done} done`;
   document.getElementById("tasks-subtitle").textContent =
@@ -1724,6 +1855,8 @@ function setView(next) {
   document.getElementById("page-project-detail").classList.toggle("visible", view === "projects");
   document.getElementById("projects-sidebar").classList.toggle("open", view === "projects");
   document.getElementById("page-files").classList.toggle("visible", view === "files");
+  document.getElementById("page-assistant").classList.toggle("visible", view === "assistant");
+  document.getElementById("page-reminders").classList.toggle("visible", view === "reminders");
   try {
     localStorage.setItem(UI_VIEW_KEY, view);
     if (view === "projects" && activeProjectId) localStorage.setItem(UI_PROJECT_KEY, activeProjectId);
@@ -2616,6 +2749,8 @@ function render() {
   if (view === "projects") { renderProjectsMain(); renderProjectsSidebar(); }
   if (view === "personal") renderPersonal();
   if (view === "files") renderFilesView();
+  if (view === "assistant") renderAssistant();
+  if (view === "reminders") renderReminders();
 }
 
 /* ---------- actions: tasks ---------- */
@@ -2981,6 +3116,19 @@ document.addEventListener("click", e => {
   const a = el.dataset.action;
 
   if (a === "nav") setView(el.dataset.view);
+  if (a === "chat-suggest") {
+    const inp = document.getElementById("chat-input");
+    inp.value = el.dataset.text || "";
+    autosizeChatInput();
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+  }
+  if (a === "chat-clear") clearChat();
+  if (a === "reminder-done") markReminderDone(el.dataset.id);
+  if (a === "reminder-snooze") snoozeReminder(el.dataset.id, 60);
+  if (a === "reminder-delete") deleteReminder(el.dataset.id);
+  if (a === "push-enable") enablePush();
+  if (a === "push-disable") disablePush();
   if (a === "filter") { taskFilter = el.dataset.filter; syncFilterTabs(); renderTasks(); }
   if (a === "status-filter") {
     statusFilter = el.dataset.status;
@@ -3381,6 +3529,10 @@ document.addEventListener("keydown", e => {
     const item = personalItems[selectedEntryIndex];
     if (item) { item.body = el.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
   }
+  if (el.id === "chat-input" && e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    document.getElementById("chat-form").requestSubmit();
+  }
   if (el.id === "edit-input") {
     if (e.key === "Enter") { e.preventDefault(); saveTaskEdit(el); }
     if (e.key === "Escape") { editingTaskKey = null; renderTasks(); }
@@ -3486,7 +3638,8 @@ window.addEventListener("drop", e => { if (dragHasFiles(e)) e.preventDefault(); 
 /* ---------- init ---------- */
 
 async function init() {
-  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks()]);
+  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks(), loadReminders(), refreshPushDevices()]);
+  await detectPushState();
   routeInboxItems();
   // give every note a stable id so files can attach to it across sessions;
   // legacy notes use a deterministic id so two devices can't diverge
@@ -3494,17 +3647,608 @@ async function init() {
   personalItems.forEach(n => { if (n && !n.id) { n.id = legacyNoteId(n); addedIds = true; } });
   if (addedIds) queueSave();
   refreshFilesCount();
-  const lastView = localStorage.getItem(UI_VIEW_KEY) || "tasks";
+  // ?view=reminders is what a tapped push notification opens
+  const params = new URLSearchParams(location.search);
+  const lastView = params.get("view") || localStorage.getItem(UI_VIEW_KEY) || "tasks";
+  if (params.has("view")) history.replaceState(null, "", location.pathname);
   const lastProject = localStorage.getItem(UI_PROJECT_KEY);
   if (lastView === "projects" || lastView === "detail") {
     if (lastProject && findProject(lastProject)) activeProjectId = lastProject;
     setView("projects");
-  } else if (lastView === "personal") {
-    setView("personal");
+  } else if (["personal", "files", "assistant", "reminders"].includes(lastView)) {
+    setView(lastView);
   } else {
     setView("tasks");
   }
+  checkDueReminders();
 }
+
+/* ---------- reminders ---------- */
+
+let reminders = [];                  // rows from the reminders table (pending, delivered and done)
+let pushStatus = "unknown";           // unsupported | denied | off | on
+let pushDevices = 0;                 // how many devices this user has enabled push on (any device)
+const notifiedReminderIds = new Set();  // reminders we've already toasted this session
+const REMINDER_POLL_MS = 30000;
+const REPEAT_LABEL = { daily: "Daily", weekdays: "Weekdays", weekly: "Weekly", monthly: "Monthly" };
+const PRIORITY_TO_URGENCY = { urgent: "high", high: "high", normal: "medium", low: "low" };
+
+async function loadReminders() {
+  try { reminders = await BrillDB.loadReminders(); } catch (e) { /* keep what we have */ }
+}
+
+function reminderTime(r) { const t = new Date(r.dueAt).getTime(); return Number.isNaN(t) ? 0 : t; }
+function pendingReminders() { return reminders.filter(r => !r.done && !r.firedAt).sort((a, b) => reminderTime(a) - reminderTime(b)); }
+function deliveredReminders() { return reminders.filter(r => !r.done && r.firedAt).sort((a, b) => new Date(b.firedAt) - new Date(a.firedAt)); }
+function doneReminders() { return reminders.filter(r => r.done).sort((a, b) => reminderTime(b) - reminderTime(a)); }
+
+// "Today · 4:30 PM", "Tomorrow · 9:00 AM", "Friday · 9:00 AM", "Thu Oct 1 · 9:00 AM"
+function fmtReminderDue(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso || "");
+  const now = new Date();
+  const startOf = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+  const days = Math.round((startOf(d) - startOf(now)) / 86400000);
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  let day;
+  if (days === 0) day = "Today";
+  else if (days === 1) day = "Tomorrow";
+  else if (days === -1) day = "Yesterday";
+  else if (days > 1 && days < 7) day = d.toLocaleDateString(undefined, { weekday: "long" });
+  else day = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
+  return `${day} · ${time}`;
+}
+
+// Next occurrence strictly after `after` for a repeating reminder (local time,
+// so a 9 AM reminder stays at 9 AM across DST changes).
+function nextReminderOccurrence(dueIso, repeat, after) {
+  let d = new Date(dueIso);
+  if (Number.isNaN(d.getTime())) return null;
+  const step = x => {
+    const n = new Date(x);
+    if (repeat === "daily") n.setDate(n.getDate() + 1);
+    else if (repeat === "weekdays") { do { n.setDate(n.getDate() + 1); } while (n.getDay() === 0 || n.getDay() === 6); }
+    else if (repeat === "weekly") n.setDate(n.getDate() + 7);
+    else if (repeat === "monthly") {
+      const day = n.getDate();
+      n.setDate(1); n.setMonth(n.getMonth() + 1);
+      n.setDate(Math.min(day, new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate()));
+    } else return null;
+    return n;
+  };
+  let guard = 0;
+  while (d <= after && guard++ < 1000) { const n = step(d); if (!n) return null; d = n; }
+  return d.toISOString();
+}
+
+async function addReminderLocal(fields) {
+  const r = {
+    id: uid("r"), title: String(fields.title || "Reminder").trim() || "Reminder", notes: String(fields.notes || ""),
+    dueAt: new Date(fields.dueAt).toISOString(), repeat: REPEAT_LABEL[fields.repeat] ? fields.repeat : "none",
+    firedAt: null, lastFiredAt: null, firedVia: "", done: false,
+    projectId: fields.projectId || "", noteId: fields.noteId || "", createdAt: new Date().toISOString(),
+  };
+  const saved = await BrillDB.addReminder(r);
+  reminders.push(saved || r);
+  return saved || r;
+}
+
+async function markReminderDone(id) {
+  const r = reminders.find(x => x.id === id);
+  if (!r) return;
+  r.done = true;
+  try { await BrillDB.updateReminder(id, { done: true }); } catch (e) { showToast("Couldn't save — check your connection"); }
+  renderReminders(); renderNav();
+}
+
+async function snoozeReminder(id, minutes) {
+  const r = reminders.find(x => x.id === id);
+  if (!r) return;
+  const next = new Date(Date.now() + minutes * 60000).toISOString();
+  r.dueAt = next; r.firedAt = null; r.done = false;
+  notifiedReminderIds.delete(id);
+  try { await BrillDB.updateReminder(id, { due_at: next, fired_at: null, done: false }); } catch (e) { showToast("Couldn't save — check your connection"); }
+  renderReminders(); renderNav();
+  showToast(`Snoozed until ${fmtReminderDue(next)}`);
+}
+
+async function deleteReminder(id) {
+  const r = reminders.find(x => x.id === id);
+  if (!r) return;
+  reminders = reminders.filter(x => x.id !== id);
+  try { await BrillDB.deleteReminder(id); } catch (e) { showToast("Couldn't delete — check your connection"); }
+  renderReminders(); renderNav();
+}
+
+async function addReminderFromForm() {
+  const titleEl = document.getElementById("reminder-title");
+  const whenEl = document.getElementById("reminder-when");
+  const repeatEl = document.getElementById("reminder-repeat");
+  const title = titleEl.value.trim();
+  if (!title) { titleEl.focus(); return; }
+  const when = new Date(whenEl.value);
+  if (!whenEl.value || Number.isNaN(when.getTime())) { whenEl.focus(); showToast("Pick a date and time"); return; }
+  try {
+    await addReminderLocal({ title, dueAt: when.toISOString(), repeat: repeatEl.value });
+    titleEl.value = ""; whenEl.value = ""; repeatEl.value = "none";
+    await checkDueReminders();
+    renderReminders(); renderNav();
+    showToast(`Reminder set for ${fmtReminderDue(when.toISOString())}`);
+  } catch (e) {
+    showToast("Couldn't save the reminder — is the reminders table created?");
+  }
+}
+
+// Show a system notification if we're allowed to (through the service worker
+// when there is one, since mobile browsers reject `new Notification`).
+async function showLocalNotification(title, body, tag) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try {
+    const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    const opts = { body: body || "", icon: "/favicon-512.png", badge: "/favicon-32.png", tag: tag || undefined };
+    if (reg && reg.showNotification) await reg.showNotification(title, opts);
+    else new Notification(title, opts);
+  } catch (e) { /* best effort */ }
+}
+
+// Deliver anything that's come due while the app is open. If this user has
+// push enabled on some device, the server cron delivers (to every device) and
+// marks the row; we just toast once. Otherwise the app itself claims the
+// reminder so it isn't shown again.
+async function checkDueReminders() {
+  const now = Date.now();
+  const due = reminders.filter(r => !r.done && !r.firedAt && reminderTime(r) <= now);
+  if (!due.length) return;
+  const pushHandles = pushDevices > 0 && !!(window.BRILL_SUPABASE || {}).vapidPublicKey;
+  let changed = false;
+  for (const r of due) {
+    if (notifiedReminderIds.has(r.id)) continue;
+    notifiedReminderIds.add(r.id);
+    if (!pushHandles) {
+      const nowIso = new Date().toISOString();
+      const next = r.repeat !== "none" ? nextReminderOccurrence(r.dueAt, r.repeat, new Date()) : null;
+      const patch = next
+        ? { due_at: next, fired_at: null, last_fired_at: nowIso, fired_via: "app" }
+        : { fired_at: nowIso, last_fired_at: nowIso, fired_via: "app" };
+      try { await BrillDB.updateReminder(r.id, patch); } catch (e) { notifiedReminderIds.delete(r.id); continue; }
+      if (next) { r.dueAt = next; notifiedReminderIds.delete(r.id); } else r.firedAt = nowIso;
+      r.lastFiredAt = nowIso; r.firedVia = "app";
+      changed = true;
+    }
+    showToast(`⏰ ${r.title}`);
+    showLocalNotification(r.title, r.notes || fmtReminderDue(r.dueAt), r.id);
+  }
+  if (changed || view === "reminders") { renderNav(); if (view === "reminders") renderReminders(); }
+}
+
+/* ---------- web push (notifications while the app is closed) ---------- */
+
+function urlBase64ToUint8Array(base64) {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+function pushSupported() {
+  return "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+}
+
+async function detectPushState() {
+  if (!pushSupported()) { pushStatus = "unsupported"; return; }
+  if (Notification.permission === "denied") { pushStatus = "denied"; return; }
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    pushStatus = sub && Notification.permission === "granted" ? "on" : "off";
+    // keep the server's copy fresh (endpoints can rotate) — harmless if unchanged
+    if (sub && pushStatus === "on") BrillDB.savePushSubscription(sub.toJSON()).catch(() => {});
+  } catch (e) { pushStatus = "off"; }
+}
+
+async function refreshPushDevices() {
+  try { pushDevices = await BrillDB.pushSubscriptionCount(); } catch (e) { /* table may not exist yet */ }
+}
+
+async function enablePush() {
+  if (!pushSupported()) { pushStatus = "unsupported"; renderPushCard(); return; }
+  const key = (window.BRILL_SUPABASE || {}).vapidPublicKey;
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { pushStatus = perm === "denied" ? "denied" : "off"; renderPushCard(); return; }
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+    if (!key) {
+      // no server-side push yet: notifications still work while the app is open
+      pushStatus = "off"; renderPushCard();
+      showToast("Notifications allowed here — push while closed needs VAPID keys on the server");
+      return;
+    }
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+    await BrillDB.savePushSubscription(sub.toJSON());
+    pushStatus = "on";
+    await refreshPushDevices();
+    showToast("Notifications are on for this device");
+  } catch (e) {
+    showToast("Couldn't enable notifications: " + ((e && e.message) || "unknown error"));
+  }
+  renderPushCard();
+}
+
+async function disablePush() {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (sub) { await BrillDB.deletePushSubscription(sub.endpoint).catch(() => {}); await sub.unsubscribe(); }
+    pushStatus = "off";
+    await refreshPushDevices();
+    showToast("Notifications turned off for this device");
+  } catch (e) { showToast("Couldn't turn off notifications"); }
+  renderPushCard();
+}
+
+function renderPushCard() {
+  const el = document.getElementById("push-card");
+  if (!el) return;
+  const cfg = window.BRILL_SUPABASE || {};
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  let html = "";
+  if (pushStatus === "unsupported") {
+    html = `<div class="push-text"><b>Notifications aren't available in this browser.</b> Reminders still show here and as a pop-up while the app is open.` +
+      (isIOS && !standalone ? ` On iPhone/iPad: tap Share → <b>Add to Home Screen</b>, then open HQ Tasks from there to turn on notifications.` : "") + `</div>`;
+  } else if (pushStatus === "denied") {
+    html = `<div class="push-text"><b>Notifications are blocked</b> for this site in your browser settings. Allow them there, then reload.</div>`;
+  } else if (pushStatus === "on") {
+    html = `<div class="push-text"><b>Notifications are on</b> for this device${pushDevices > 1 ? ` (${pushDevices} devices total)` : ""}. Reminders arrive even when the app is closed.</div>
+      <button class="new-btn" data-action="push-disable">Turn off here</button>`;
+  } else {
+    html = `<button class="new-btn primary" data-action="push-enable">Enable notifications on this device</button>
+      <div class="push-text">${cfg.vapidPublicKey
+        ? "Get reminders as notifications even when the app is closed."
+        : "<b>Server push isn't configured yet</b> (no VAPID keys) — you'll get reminders as pop-ups while the app is open. See supabase/MIGRATION.md to finish setup."}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderReminders() {
+  const pend = pendingReminders(), deliv = deliveredReminders(), done = doneReminders();
+  const now = Date.now();
+  document.getElementById("reminders-subtitle").textContent =
+    `${pend.length} upcoming${deliv.length ? ` · ${deliv.length} waiting for you` : ""}`;
+  renderPushCard();
+  const row = (r, kind) => {
+    const isDue = kind === "pending" && reminderTime(r) <= now;
+    return `<div class="rem-row ${kind}${isDue ? " due" : ""}">
+      <div class="rem-body">
+        <div class="rem-title">${escHtml(r.title)}</div>
+        <div class="rem-when">${escHtml(kind === "delivered" ? "Delivered " + fmtReminderDue(r.firedAt) : fmtReminderDue(r.dueAt))}
+          ${r.repeat && r.repeat !== "none" ? `<span class="pill pill-blue">${escHtml(REPEAT_LABEL[r.repeat] || r.repeat)}</span>` : ""}
+          ${isDue ? `<span class="pill pill-red">Due now</span>` : ""}</div>
+        ${r.notes ? `<div class="rem-notes">${escHtml(r.notes)}</div>` : ""}
+      </div>
+      <div class="rem-actions">
+        ${kind !== "done" ? `<button class="icon-btn" data-action="reminder-done" data-id="${escHtml(r.id)}" title="Mark done">&#10003; Done</button>` : ""}
+        ${kind !== "done" && (kind === "delivered" || isDue) ? `<button class="icon-btn" data-action="reminder-snooze" data-id="${escHtml(r.id)}" title="Remind me again in an hour">&#9202; +1h</button>` : ""}
+        <button class="icon-btn danger" data-action="reminder-delete" data-id="${escHtml(r.id)}" title="Delete">&#10005;</button>
+      </div>
+    </div>`;
+  };
+  const section = (title, list, kind, empty) =>
+    `<div class="rem-section"><div class="rem-section-title">${title} <span>${list.length}</span></div>` +
+    (list.length ? list.map(r => row(r, kind)).join("") : `<div class="card-empty">${empty}</div>`) + `</div>`;
+  document.getElementById("reminders-list").innerHTML =
+    (deliv.length ? section("Waiting for you", deliv, "delivered", "") : "") +
+    section("Upcoming", pend, "pending", "Nothing scheduled. Try the Assistant: “remind me tomorrow at 9 to call Brad”.") +
+    (done.length ? `<details class="rem-done"><summary>Done (${done.length})</summary>${done.slice(0, 40).map(r => row(r, "done")).join("")}</details>` : "");
+}
+
+/* ---------- assistant (chat intake) ---------- */
+
+const CHAT_KEY = "v2-assistant-chat";
+let chatMessages = [];
+try { chatMessages = JSON.parse(localStorage.getItem(CHAT_KEY)) || []; } catch (e) { chatMessages = []; }
+let chatBusy = false;
+
+function saveChat() {
+  try { localStorage.setItem(CHAT_KEY, JSON.stringify(chatMessages.slice(-60))); } catch (e) {}
+}
+
+function chatTextHtml(s) {
+  return escHtml(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+}
+
+// Convert the assistant's simple Markdown into the Long Notes editor's HTML
+// (paragraphs, <ul>/<ol>, <ul class="checklist">, <h3>). Everything is escaped.
+function markdownToNoteHtml(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  const inline = s => escHtml(s)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<i>$2</i>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+  let html = "", list = null;
+  const close = () => { if (list) { html += list === "ol" ? "</ol>" : "</ul>"; list = null; } };
+  const open = kind => { if (list !== kind) { close(); html += kind === "ol" ? "<ol>" : kind === "checklist" ? '<ul class="checklist">' : "<ul>"; list = kind; } };
+  for (const raw of lines) {
+    const line = raw.trim();
+    let m;
+    if (!line) { close(); continue; }
+    if ((m = line.match(/^[-*]\s+\[( |x|X)\]\s+(.*)$/))) { open("checklist"); html += `<li${m[1] !== " " ? ' class="checked"' : ""}>${inline(m[2])}</li>`; continue; }
+    if ((m = line.match(/^[-*•]\s+(.*)$/))) { open("ul"); html += `<li>${inline(m[1])}</li>`; continue; }
+    if ((m = line.match(/^\d+[.)]\s+(.*)$/))) { open("ol"); html += `<li>${inline(m[1])}</li>`; continue; }
+    if ((m = line.match(/^#{1,6}\s+(.*)$/))) { close(); html += `<h3>${inline(m[1])}</h3>`; continue; }
+    close(); html += `<p>${inline(line)}</p>`;
+  }
+  close();
+  return html;
+}
+
+function utcOffsetString(d) {
+  const mins = -d.getTimezoneOffset();
+  const sign = mins >= 0 ? "+" : "-";
+  const a = Math.abs(mins);
+  return `${sign}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
+}
+
+// What the model needs to know about the workspace to file things correctly.
+function assistantContext() {
+  const now = new Date();
+  let timezone = "";
+  try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+  const openInbox = inboxItems.filter(i => typeof i === "object" ? !i.project : true).length;
+  return {
+    nowIso: now.toISOString(),
+    nowLocal: now.toLocaleString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }),
+    timezone, utcOffset: utcOffsetString(now),
+    inboxOpen: openInbox,
+    projects: projects.filter(p => !p.isTemplate && !p.archived).map(p => ({
+      name: p.name || "Untitled", status: p.status || "Active", open: (p.todos || []).filter(t => !t.completed).length,
+    })),
+    noteGroups: noteGroups(),
+    notes: personalItems.filter(n => n && !n.archived).map(n => ({ id: n.id, title: n.title || "Untitled", group: n.group || "" })),
+    reminders: pendingReminders().map(r => ({ id: r.id, title: r.title, due_at: r.dueAt, due_local: fmtReminderDue(r.dueAt), repeat: r.repeat })),
+  };
+}
+
+function findProjectByName(name) {
+  const wanted = String(name || "").trim().toLowerCase();
+  if (!wanted) return null;
+  const match = p => !p.isTemplate && (p.name || "").trim().toLowerCase() === wanted;
+  return projects.find(p => match(p) && !p.archived) || projects.find(match) || null;
+}
+
+function makeProject(name, extra) {
+  const now = new Date().toISOString();
+  const p = {
+    id: uid("p"), name, status: "Active", owner: "", due: "", notes: "", personal: false, ai: false,
+    archived: false, isTemplate: false, pinned: false, createdAt: now, updatedAt: now, todos: [], ...(extra || {}),
+  };
+  projects.unshift(p);
+  return p;
+}
+
+function makeTodo(text, priority, notes) {
+  return { id: uid("pt"), text, completed: false, urgency: PRIORITY_TO_URGENCY[priority] || "medium", createdAt: new Date().toISOString(), notes: notes ? String(notes) : "" };
+}
+
+// Apply the tool calls the model asked for to the user's data, returning a
+// chip per action for the chat transcript. `open` makes a chip clickable.
+async function applyAssistantActions(actions) {
+  const out = [];
+  let touchedState = false, touchedInbox = false;
+  for (const a of actions) {
+    const inp = a && a.input && typeof a.input === "object" ? a.input : {};
+    const name = a && a.name ? String(a.name) : "unknown";
+    try {
+      if (name === "add_task") {
+        const text = String(inp.text || "").trim();
+        if (!text) throw new Error("empty task");
+        const priority = PRIORITY_CONFIG[inp.priority] ? inp.priority : "normal";
+        if (inp.project && String(inp.project).trim()) {
+          let p = findProjectByName(inp.project), created = false;
+          if (!p) { p = makeProject(String(inp.project).trim()); created = true; }
+          p.todos.unshift(makeTodo(text, priority, inp.notes));
+          touchProject(p); touchedState = true;
+          out.push({ ok: true, label: `Added to ${p.name}${created ? " (new project)" : ""}: ${text}`, open: { action: "open-project", id: p.id } });
+        } else {
+          await BrillDB.addInbox({ task: text, priority, notes: inp.notes || "" });
+          touchedInbox = true;
+          out.push({ ok: true, label: `Added to Inbox (${PRIORITY_CONFIG[priority].title.toLowerCase()}): ${text}`, open: { action: "nav", view: "tasks" } });
+        }
+      } else if (name === "create_project") {
+        const pname = String(inp.name || "").trim();
+        if (!pname) throw new Error("no project name");
+        let p = findProjectByName(pname);
+        const existed = !!p;
+        if (!p) {
+          p = makeProject(pname, {
+            status: ["Active", "Paused", "Done"].includes(inp.status) ? inp.status : "Active",
+            due: /^\d{4}-\d{2}-\d{2}$/.test(String(inp.due || "")) ? inp.due : "",
+            owner: String(inp.owner || ""), notes: String(inp.notes || ""),
+          });
+        } else if (inp.notes) {
+          p.notes = (p.notes ? p.notes + "\n" : "") + String(inp.notes);
+        }
+        const todos = Array.isArray(inp.todos) ? inp.todos.map(t => String(t).trim()).filter(Boolean) : [];
+        todos.slice().reverse().forEach(t => p.todos.unshift(makeTodo(t, "normal")));   // keep the listed order
+        touchProject(p); touchedState = true;
+        out.push({ ok: true, label: `${existed ? "Updated" : "Created"} project ${p.name}${todos.length ? ` with ${todos.length} to-do${todos.length === 1 ? "" : "s"}` : ""}`, open: { action: "open-project", id: p.id } });
+      } else if (name === "create_note") {
+        const title = String(inp.title || "").trim() || "Untitled";
+        const now = new Date().toISOString();
+        const n = { id: uid("n"), title, body: markdownToNoteHtml(inp.body), group: String(inp.group || "").trim(), archived: false, pinned: false, createdAt: now, updatedAt: now };
+        personalItems.unshift(n); touchedState = true;
+        out.push({ ok: true, label: `New long note: ${title}${n.group ? " · " + n.group : ""}`, open: { action: "open-note", id: n.id } });
+      } else if (name === "append_to_note") {
+        const n = personalItems.find(x => x && String(x.id) === String(inp.note_id));
+        if (!n) throw new Error("that note wasn't found");
+        n.body = (n.body || "") + markdownToNoteHtml(inp.text);
+        n.updatedAt = new Date().toISOString(); touchedState = true;
+        out.push({ ok: true, label: `Added to note: ${n.title || "Untitled"}`, open: { action: "open-note", id: n.id } });
+      } else if (name === "set_reminder") {
+        const when = new Date(inp.due_at);
+        if (Number.isNaN(when.getTime())) throw new Error("couldn't understand the time");
+        const r = await addReminderLocal({ title: inp.title, notes: inp.notes, dueAt: when.toISOString(), repeat: inp.repeat });
+        out.push({ ok: true, label: `Reminder ${fmtReminderDue(r.dueAt)}: ${r.title}${r.repeat !== "none" ? ` (${REPEAT_LABEL[r.repeat].toLowerCase()})` : ""}`, open: { action: "nav", view: "reminders" } });
+      } else if (name === "cancel_reminder") {
+        const r = reminders.find(x => x.id === String(inp.reminder_id));
+        if (!r) throw new Error("that reminder wasn't found");
+        await BrillDB.deleteReminder(r.id);
+        reminders = reminders.filter(x => x.id !== r.id);
+        out.push({ ok: true, label: `Cancelled reminder: ${r.title}` });
+      } else {
+        out.push({ ok: false, label: `Unknown action: ${name}` });
+      }
+    } catch (e) {
+      out.push({ ok: false, label: `Couldn't ${name.replace(/_/g, " ")}: ${(e && e.message) || "error"}` });
+    }
+  }
+  if (touchedState) queueSave();
+  if (touchedInbox) await loadInbox();
+  if (touchedState || touchedInbox) BrillDB.setContext(projects, personalItems);
+  return out;
+}
+
+const CHAT_SUGGESTIONS = [
+  "Add a task: follow up with Brad Weber tomorrow",
+  "Remind me Friday at 9am to send the BSH invoice",
+  "Start a project called Q4 planning with steps: draft goals, review budget, book offsite",
+  "New long note — meeting notes with Tom: …",
+];
+
+function renderAssistant() {
+  const log = document.getElementById("chat-log");
+  if (!log) return;
+  const cfg = window.BRILL_SUPABASE || {};
+  const parts = [];
+  if (cfg.assistant === false) {
+    parts.push(`<div class="chat-notice">The assistant isn't configured yet — add <code>ANTHROPIC_API_KEY</code> to the Vercel project and redeploy (see supabase/MIGRATION.md).</div>`);
+  }
+  if (!chatMessages.length) {
+    parts.push(`<div class="chat-empty">
+      <div class="chat-empty-title">Tell me what to capture.</div>
+      <div class="chat-empty-sub">I'll file it as a task, a project, a long note, or a reminder — and tell you where it went.</div>
+      <div class="chat-suggest">${CHAT_SUGGESTIONS.map(s => `<button class="chat-chip" data-action="chat-suggest" data-text="${escHtml(s)}">${escHtml(s)}</button>`).join("")}</div>
+    </div>`);
+  }
+  chatMessages.forEach(m => {
+    if (m.role === "user") {
+      parts.push(`<div class="chat-msg user"><div class="chat-bubble">${chatTextHtml(m.content)}</div></div>`);
+      return;
+    }
+    const chips = (m.actions || []).map(a => {
+      const cls = `chat-chip${a.ok ? "" : " failed"}`;
+      const icon = a.ok ? "&#10003;" : "&#9888;";
+      if (a.open && a.open.action) {
+        const data = Object.entries(a.open).filter(([k]) => k !== "action").map(([k, v]) => `data-${k}="${escHtml(v)}"`).join(" ");
+        return `<button class="${cls}" data-action="${escHtml(a.open.action)}" ${data}>${icon} ${escHtml(a.label)}</button>`;
+      }
+      return `<span class="${cls}">${icon} ${escHtml(a.label)}</span>`;
+    }).join("");
+    parts.push(`<div class="chat-msg assistant${m.error ? " error" : ""}"><div class="chat-bubble">${chatTextHtml(m.content)}</div>${chips ? `<div class="chat-actions">${chips}</div>` : ""}</div>`);
+  });
+  if (chatBusy) parts.push(`<div class="chat-msg assistant"><div class="chat-bubble typing"><span></span><span></span><span></span></div></div>`);
+  log.innerHTML = parts.join("");
+  const mic = document.getElementById("chat-mic");
+  if (mic) mic.hidden = !speechSupported();
+  if (view === "assistant") {
+    const main = document.querySelector(".main");
+    if (main) main.scrollTop = main.scrollHeight;
+  }
+}
+
+async function sendChatMessage(text) {
+  text = String(text || "").trim();
+  if (!text || chatBusy) return;
+  chatMessages.push({ role: "user", content: text });
+  saveChat();
+  chatBusy = true;
+  renderAssistant();
+  const history = chatMessages
+    .filter(m => !m.error && (m.role === "user" || m.role === "assistant"))
+    .slice(-24)
+    .map(m => ({
+      role: m.role,
+      content: m.role === "assistant" && (m.actions || []).length
+        ? m.content + "\n\n[Actions taken: " + m.actions.map(a => a.label).join("; ") + "]"
+        : m.content,
+    }));
+  let reply;
+  try {
+    const res = await BrillDB.assistant({ messages: history, context: assistantContext() });
+    const applied = await applyAssistantActions(res.actions || []);
+    await checkDueReminders();   // a reminder set for "now" is delivered immediately
+    const text2 = String(res.reply || "").trim();
+    reply = { role: "assistant", content: text2 || (applied.length ? "Done." : "Okay."), actions: applied };
+  } catch (e) {
+    reply = { role: "assistant", content: (e && e.message) || "Something went wrong reaching the assistant.", error: true };
+  }
+  chatBusy = false;
+  chatMessages.push(reply);
+  saveChat();
+  renderAssistant();
+  renderNav();
+}
+
+function clearChat() {
+  if (chatMessages.length && !confirm("Clear this conversation? Your tasks, notes and reminders are unaffected.")) return;
+  chatMessages = [];
+  saveChat();
+  renderAssistant();
+}
+
+function autosizeChatInput() {
+  const el = document.getElementById("chat-input");
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 200) + "px";
+}
+
+/* voice dictation (Web Speech API — Chrome, Edge, Safari) */
+let speechRec = null;
+function speechSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+
+function toggleDictation() {
+  const mic = document.getElementById("chat-mic");
+  const input = document.getElementById("chat-input");
+  if (speechRec) { speechRec.stop(); return; }
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Rec) return;
+  const rec = new Rec();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = navigator.language || "en-US";
+  const base = input.value ? input.value.replace(/\s+$/, "") + " " : "";
+  let finalText = "";
+  rec.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += t + " "; else interim += t;
+    }
+    input.value = base + finalText + interim;
+    autosizeChatInput();
+  };
+  rec.onerror = () => { showToast("Dictation stopped"); };
+  rec.onend = () => { speechRec = null; mic.classList.remove("listening"); input.focus(); };
+  try { rec.start(); speechRec = rec; mic.classList.add("listening"); } catch (e) { speechRec = null; }
+}
+
+document.getElementById("chat-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const input = document.getElementById("chat-input");
+  const text = input.value;
+  input.value = "";
+  autosizeChatInput();
+  sendChatMessage(text);
+});
+document.getElementById("chat-input").addEventListener("input", autosizeChatInput);
+document.getElementById("chat-mic").addEventListener("click", toggleDictation);
+document.getElementById("reminder-form").addEventListener("submit", e => {
+  e.preventDefault();
+  addReminderFromForm();
+});
 
 /* ---------- auth gate + boot ---------- */
 
@@ -3516,6 +4260,13 @@ function startPolling() {
     const filed = routeInboxItems();
     if (view === "tasks" || filed) render(); else renderNav();
   }, INBOX_POLL_MS);
+  // reminders: pick up ones set on another device, and deliver anything that's come due
+  setInterval(async () => {
+    await loadReminders();
+    await checkDueReminders();
+    if (view === "reminders") renderReminders();
+    renderNav();
+  }, REMINDER_POLL_MS);
   // keep this device in sync with any other computer editing the same data
   setInterval(maybeSyncState, 12000);
   // also pull fresh when returning to the tab, so switching computers shows current data fast

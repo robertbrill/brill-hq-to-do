@@ -405,6 +405,118 @@
       }
       return rows.length;
     },
+
+    /* ---------- authenticated calls to our own Vercel functions ---------- */
+
+    async accessToken() {
+      const { data } = await client.auth.getSession();
+      return data && data.session ? data.session.access_token : null;
+    },
+
+    // POST JSON to one of the api/ functions with the user's access token.
+    // Throws an Error whose message is safe to show in the UI.
+    async callApi(path, payload) {
+      const token = await this.accessToken();
+      if (!token) throw new Error("Not signed in");
+      let res;
+      try {
+        res = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload || {}),
+        });
+      } catch (e) {
+        throw new Error("Couldn't reach the server — check your connection");
+      }
+      let json = null;
+      try { json = await res.json(); } catch (e) { json = null; }
+      if (!res.ok) {
+        const msg = json && (json.message || json.error);
+        throw new Error(msg ? String(msg) : `Request failed (${res.status})`);
+      }
+      return json || {};
+    },
+
+    // The Assistant: { messages:[{role,content}], context:{...} } -> { reply, actions }
+    assistant(payload) { return this.callApi("/api/assistant", payload); },
+
+    /* ---------- reminders ---------- */
+
+    _reminderFromRow(r) {
+      return {
+        id: r.id, title: r.title || "", notes: r.notes || "", dueAt: r.due_at || "",
+        repeat: r.repeat || "none", firedAt: r.fired_at || null, lastFiredAt: r.last_fired_at || null,
+        firedVia: r.fired_via || "", done: !!r.done, projectId: r.project_id || "", noteId: r.note_id || "",
+        createdAt: r.created_at || "",
+      };
+    },
+
+    async loadReminders() {
+      await ensureUser();
+      const { data, error } = await client.from("reminders").select("*").order("due_at", { ascending: true });
+      if (error) throw error;
+      return (data || []).map((r) => this._reminderFromRow(r));
+    },
+
+    // r: the app-shaped reminder (see _reminderFromRow); returns the same shape.
+    async addReminder(r) {
+      const uid = await ensureUser();
+      if (!uid) throw new Error("not signed in");
+      const row = {
+        id: String(r.id), user_id: uid, title: String(r.title || "Reminder").trim() || "Reminder",
+        notes: String(r.notes || ""), due_at: toTs(r.dueAt) || new Date().toISOString(),
+        repeat: r.repeat || "none", done: false,
+        project_id: String(r.projectId || ""), note_id: String(r.noteId || ""),
+      };
+      const { data, error } = await client.from("reminders").insert(row).select("*").single();
+      if (error) throw error;
+      return this._reminderFromRow(data);
+    },
+
+    // patch uses column names: { done, fired_at, last_fired_at, fired_via, due_at, title, notes, repeat }
+    async updateReminder(id, patch) {
+      await ensureUser();
+      const { error } = await client.from("reminders").update(patch).eq("id", String(id));
+      if (error) throw error;
+    },
+
+    async deleteReminder(id) {
+      await ensureUser();
+      const { error } = await client.from("reminders").delete().eq("id", String(id));
+      if (error) throw error;
+    },
+
+    /* ---------- web push subscriptions (one row per device) ---------- */
+
+    // sub: PushSubscription.toJSON() — { endpoint, expirationTime, keys:{p256dh, auth} }
+    async savePushSubscription(sub) {
+      const uid = await ensureUser();
+      if (!uid) throw new Error("not signed in");
+      if (!sub || !sub.endpoint) throw new Error("invalid subscription");
+      const row = {
+        id: "ps_" + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10),
+        user_id: uid, endpoint: sub.endpoint, subscription: sub,
+        user_agent: (navigator.userAgent || "").slice(0, 300), last_seen_at: new Date().toISOString(),
+      };
+      // endpoint is unique: re-enabling on the same device refreshes the row
+      const { error } = await client.from("push_subscriptions")
+        .upsert(row, { onConflict: "endpoint", ignoreDuplicates: false });
+      if (error) throw error;
+    },
+
+    async deletePushSubscription(endpoint) {
+      await ensureUser();
+      if (!endpoint) return;
+      const { error } = await client.from("push_subscriptions").delete().eq("endpoint", endpoint);
+      if (error) throw error;
+    },
+
+    async pushSubscriptionCount() {
+      await ensureUser();
+      const { count, error } = await client.from("push_subscriptions").select("id", { count: "exact", head: true });
+      if (error) throw error;
+      return count || 0;
+    },
   };
 
   window.BrillDB = BrillDB;

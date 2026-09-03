@@ -39,6 +39,10 @@ same; only the storage layer changed.
 | `supabase/schema.sql` | Normalized tables + Row-Level Security + Storage bucket. |
 | `supabase/migrate.mjs` | One-time importer: Mac JSON/files → Supabase. |
 | `api/config.js` | Vercel function that serves `/config.js` from env vars. |
+| `api/assistant.js` | Vercel function behind the **Assistant** view: Claude turns what you type (or dictate) into tasks / projects / long notes / reminders. |
+| `api/send-reminders.js` | Vercel cron (every minute): sends due reminders as Web Push notifications. |
+| `lib/verify-user.js` | Shared Supabase access-token check for the functions above. |
+| `sw.js`, `manifest.webmanifest` | Service worker (receives push) + PWA manifest (lets iPhone install it, which iOS requires for push). |
 | `config.example.js` | Template for local dev (`cp` to git-ignored `config.js`). |
 
 **Privacy model changes.** The old app is Tailscale-only. The cloud app is on the
@@ -50,6 +54,23 @@ The base task list (which contains names/emails/phone numbers) is **not** a publ
 file. It's served only to a signed-in user by `api/base-tasks.js`, which verifies
 the caller's Supabase access token before returning anything. The old public
 `todo-data.js` and `todo-v2.html` are excluded from the deploy via `.vercelignore`.
+
+## Assistant & reminders
+
+- **Assistant** (sidebar → Assistant): talk to the app. "Add a task to call Brad
+  tomorrow", "start a project for the Q4 plan with these steps…", "write up
+  these meeting notes as a long note", "remind me Friday at 9 to send the
+  invoice". A Claude-backed function (`api/assistant.js`) decides what to file
+  and the browser writes it through your own Supabase session, so RLS still
+  applies. There's a mic button for dictation in browsers that support it.
+- **Reminders** (sidebar → Reminders): everything scheduled, with Done / snooze.
+  While the app is open, due reminders pop up as a toast + browser notification.
+  Turn on **Enable notifications on this device** to also get them when the app
+  is closed (Web Push, delivered by the `api/send-reminders.js` cron). On iPhone
+  add the app to the Home Screen first.
+
+Setup (env vars, the two new tables, VAPID keys) is in
+[`supabase/MIGRATION.md`](supabase/MIGRATION.md#assistant--reminders-setup).
 
 The old `todo-v2.html` + `todo-server.py` keep running on the Mac, untouched, until
 the cloud version is verified.

@@ -2,5 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/config.js", "destination": "/api/config" }
+  ],
+  "crons": [
+    { "path": "/api/send-reminders", "schedule": "* * * * *" }
   ]
 }

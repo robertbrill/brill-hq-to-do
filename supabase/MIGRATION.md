@@ -23,7 +23,8 @@ The old app on the Mac keeps working, untouched, until you've verified the new o
 | `supabase/migrate.mjs` | One-time importer: Mac JSON/files → Supabase. |
 | `api/config.js` | Vercel function that serves `/config.js` from env vars. |
 | `config.example.js` | Template for **local** dev config (copy to `config.js`). |
-| `vercel.json` | Rewrites `/config.js` → the config function. |
+| `vercel.json` | Rewrites `/config.js` → the config function; schedules the reminder cron. |
+| `api/assistant.js`, `api/send-reminders.js`, `lib/verify-user.js`, `sw.js`, `manifest.webmanifest` | Assistant chat + reminder push (see below). |
 
 ---
 
@@ -44,8 +45,10 @@ SUPABASE_URL       = https://<project-ref>.supabase.co
 SUPABASE_ANON_KEY  = <anon public key>        # Project Settings → API
 ```
 
-> Do **not** put the `service_role` key in Vercel — the app never needs it, and
-> `api/config.js` only ever emits the URL + anon key.
+> The browser app never needs the `service_role` key, and `api/config.js` only
+> ever emits the URL + anon key. The one server-side use is the reminder push
+> cron (see *Assistant & reminders setup* below), which reads it from
+> `SUPABASE_SERVICE_ROLE_KEY`.
 
 Then:
 
@@ -91,6 +94,61 @@ Mac `launchd` server (`com.robert.ai-brill.todo-server`) at your leisure.
 
 ---
 
+## Assistant & reminders setup
+
+Two features live behind extra config: the **Assistant** chat (Claude turns
+plain English into tasks / projects / long notes / reminders) and **Reminders**
+with push notifications.
+
+### 1. Tables (once)
+
+Re-run `supabase/schema.sql` in the Supabase SQL Editor. It's idempotent; the
+new parts are the `reminders` and `push_subscriptions` tables (RLS, owned by
+`auth.uid()` like everything else).
+
+### 2. Environment variables (Vercel → Project → Settings → Environment Variables)
+
+| Variable | Used by | Notes |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | `api/assistant.js` | Enables the Assistant. From console.anthropic.com. Without it the Assistant view shows a "not configured" notice. |
+| `ASSISTANT_MODEL` | `api/assistant.js` | Optional. Defaults to `claude-opus-5`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | `api/send-reminders.js` | Project Settings → API → `service_role`. **Server-only** — this is the only place it's used; it lets the cron read every user's due reminders. |
+| `CRON_SECRET` | `api/send-reminders.js` | Any long random string (`openssl rand -hex 32`). Vercel sends it as the bearer token on cron calls; the function refuses anything else. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | push | Generate once: `npx web-push generate-vapid-keys`. The public half is also served to the browser via `/config.js`. |
+| `VAPID_SUBJECT` | push | Optional. `mailto:you@example.com` or an https URL; defaults to the production deployment URL. |
+
+Redeploy after adding them (env vars are read at deploy time for the cron
+schedule and at request time for the rest).
+
+### 3. How reminders are delivered
+
+- **App open** (any device): the app polls every 30 s; a due reminder shows a
+  toast and, if you've allowed notifications, a system notification.
+- **App closed**: `vercel.json` runs `/api/send-reminders` every minute. It
+  finds due, undelivered reminders and pushes them to every device where you
+  clicked **Enable notifications on this device** (Reminders view). A reminder
+  is only marked delivered once a push actually went out, so nothing is lost if
+  you haven't enabled a device yet — it waits for you in the Reminders view.
+- **iPhone / iPad**: Safari only allows Web Push for installed web apps. Share →
+  **Add to Home Screen**, open HQ Tasks from the icon, then enable
+  notifications inside it. (`manifest.webmanifest` + the iOS meta tags in
+  `index.html` make it installable.)
+- Repeating reminders (daily / weekdays / weekly / monthly) roll forward to the
+  next occurrence after each delivery.
+
+Per-minute cron schedules need a Vercel **Pro** plan (Hobby is once a day);
+this project is on Pro.
+
+### 4. Privacy note
+
+The Assistant sends your message plus a compact summary of your workspace
+(project names, note titles, pending reminder titles, current local time) to
+the Anthropic API so it can file things in the right place. Note bodies and
+task lists are not sent. Chat history is kept only in the browser
+(`localStorage`), not in the database.
+
+---
+
 ## Local development (optional)
 
 To run `index.html` against Supabase from the Mac without Vercel:
@@ -101,6 +159,8 @@ python3 -m http.server 8080      # or any static server; open /index.html
 ```
 
 Locally, `/config.js` is served as the static file; on Vercel it's the function.
+The `/api/*` functions (base tasks, Assistant, reminder push) only run under
+`vercel dev` (with the env vars above in `.env.local`), not a plain static server.
 
 ---
 
@@ -114,9 +174,10 @@ Locally, `/config.js` is served as the static file; on Vercel it's the function.
   from binary docs; the browser version only full-text-indexes plain-text files.
   Images and text files still upload and search by name. Adding pdf.js/mammoth is
   a future enhancement.
-- **AI intake (`add-todo.sh`).** The old CLI posts to the Mac server. To keep AI
-  task intake working against the cloud, insert into the Supabase `inbox` table
-  instead (see `BrillDB.addInbox` for the shape). Not wired yet.
+- **AI intake (`add-todo.sh`).** The old CLI posts to the Mac server. In the
+  cloud app the Assistant view is the intake path (it writes to `inbox` /
+  projects directly). A scripted intake can still insert into the Supabase
+  `inbox` table (see `BrillDB.addInbox` for the shape).
 - **Timestamps in unusual locales.** Migrated `created_at`/`updated_at` are parsed
   from the old app's stored values; if the Mac's locale wrote a non-US date string
   the migrator can't parse, that row falls back to the DB default (migration time).
