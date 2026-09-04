@@ -1295,6 +1295,7 @@
 <div class="compact-bar" id="compact-bar">
   <img src="brill-logo.png" alt="">
   <span class="cb-title" id="compact-title">Tasks</span>
+  <button class="cb-btn" id="compact-new" data-action="new-entry" hidden title="New">+ New</button>
   <button class="cb-btn" id="compact-list-toggle" data-action="toggle-compact-list" hidden>Entries</button>
   <button class="cb-btn" id="compact-nav-toggle" data-action="toggle-compact-nav" title="Show or hide the menu">&#9776; Menu</button>
 </div>
@@ -1603,8 +1604,11 @@ function updateCompactBar() {
   const labels = { tasks: "Tasks", projects: "Projects", personal: "Long Notes", files: "Files", assistant: "Assistant", reminders: "Reminders" };
   document.getElementById("compact-title").textContent = labels[view] || "";
   const listBtn = document.getElementById("compact-list-toggle");
+  const newBtn = document.getElementById("compact-new");
   const hasList = view === "personal" || view === "projects";
   listBtn.hidden = !hasList;
+  newBtn.hidden = !hasList;
+  newBtn.dataset.action = view === "projects" ? "new-project" : "new-entry";
   if (view === "personal") {
     const n = personalItems.filter(i => i && (showArchivedNotes ? i.archived : !i.archived)).length;
     listBtn.textContent = `Entries · ${n}`;
@@ -2999,6 +3003,7 @@ function newProject() {
   setOverview(false);
   queueSave();
   setView("projects");
+  if (isCompact()) setCompactList(false);
   const nameInput = document.getElementById("detail-name");
   if (nameInput) nameInput.focus();
 }
