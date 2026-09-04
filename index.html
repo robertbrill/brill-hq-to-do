@@ -3864,8 +3864,17 @@ async function enablePush() {
       showToast("Notifications allowed here — push while closed needs VAPID keys on the server");
       return;
     }
+    // a valid VAPID public key decodes to exactly 65 bytes (~87 base64url chars);
+    // anything else is a paste/truncation problem on the server, not a browser issue
+    let keyBytes = null;
+    try { keyBytes = urlBase64ToUint8Array(key); } catch (e) { keyBytes = null; }
+    if (!keyBytes || keyBytes.length !== 65) {
+      pushStatus = "off"; renderPushCard();
+      showToast(`The server's VAPID_PUBLIC_KEY looks wrong (${key.length} chars, expected ~87) — re-paste it in Vercel and redeploy`);
+      return;
+    }
     let sub = await reg.pushManager.getSubscription();
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes });
     await BrillDB.savePushSubscription(sub.toJSON());
     pushStatus = "on";
     await refreshPushDevices();
