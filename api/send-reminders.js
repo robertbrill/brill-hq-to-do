@@ -26,6 +26,13 @@ const { supabaseEnv, bearerToken } = require("../lib/verify-user");
 
 const BATCH = 200;
 
+// Every deliberate failure is logged so the cause shows up in Vercel's runtime
+// logs (the cron's response body is never seen by anyone otherwise).
+function fail(res, message) {
+  console.error("[send-reminders] " + message);
+  res.status(500).json({ error: message });
+}
+
 // Next occurrence strictly after `after` for a repeating reminder.
 function nextOccurrence(dueIso, repeat, after) {
   let d = new Date(dueIso);
@@ -66,7 +73,7 @@ module.exports = async (req, res) => {
     !url && "SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY",
     !vapidPublic && "VAPID_PUBLIC_KEY", !vapidPrivate && "VAPID_PRIVATE_KEY", !subject && "VAPID_SUBJECT",
   ].filter(Boolean);
-  if (missing.length) { res.status(500).json({ error: "missing env: " + missing.join(", ") }); return; }
+  if (missing.length) { fail(res, "missing env: " + missing.join(", ")); return; }
 
   webpush.setVapidDetails(subject, vapidPublic, vapidPrivate);
   const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -75,12 +82,12 @@ module.exports = async (req, res) => {
   const { data: due, error } = await db.from("reminders").select("*")
     .is("fired_at", null).eq("done", false).lte("due_at", now.toISOString())
     .order("due_at", { ascending: true }).limit(BATCH);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { fail(res, "reading reminders: " + error.message + (error.hint ? " (" + error.hint + ")" : "")); return; }
   if (!due || !due.length) { res.status(200).json({ checked: 0, sent: 0 }); return; }
 
   const userIds = [...new Set(due.map((r) => r.user_id))];
   const { data: subs, error: subErr } = await db.from("push_subscriptions").select("*").in("user_id", userIds);
-  if (subErr) { res.status(500).json({ error: subErr.message }); return; }
+  if (subErr) { fail(res, "reading push_subscriptions: " + subErr.message); return; }
   const subsByUser = {};
   (subs || []).forEach((s) => { (subsByUser[s.user_id] = subsByUser[s.user_id] || []).push(s); });
 
@@ -119,7 +126,9 @@ module.exports = async (req, res) => {
 
   if (dead.size) await db.from("push_subscriptions").delete().in("id", [...dead]);
 
-  res.status(200).json({ checked: due.length, delivered, sent, pendingNoDevice, removedSubscriptions: dead.size, failures });
+  const summary = { checked: due.length, delivered, sent, pendingNoDevice, removedSubscriptions: dead.size, failures };
+  if (failures.length) console.warn("[send-reminders]", JSON.stringify(summary));
+  res.status(200).json(summary);
 };
 
 module.exports.nextOccurrence = nextOccurrence;
