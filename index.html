@@ -1074,6 +1074,9 @@
   .search-more { font-size: 12px; color: var(--faint); padding: 4px 10px 8px; }
 
   /* ============ Mobile ============ */
+  /* compact top bar exists only on narrow screens (see the media block) */
+  .compact-bar { display: none; }
+
   /* ============ Assistant (chat intake) ============ */
   #page-assistant.visible { display: flex; flex-direction: column; min-height: 100%; padding-bottom: 24px; }
   .chat-log { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 4px 0 18px; }
@@ -1151,7 +1154,24 @@
   .quick-add input[type="datetime-local"] { border: none; outline: none; font: inherit; font-size: 13px; color: var(--muted); background: transparent; }
 
   @media (max-width: 760px) {
-    body { flex-direction: column; }
+    /* the page is a fixed-height column: compact bar / (menu) / (list) / a
+       scrolling main area — so the note editor scrolls on its own and the
+       text can be brought right up to the top of the screen */
+    body { flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+    .compact-bar {
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+      padding: 8px 12px; background: var(--sidebar); border-bottom: 1px solid var(--border);
+    }
+    .compact-bar img { height: 22px; width: auto; }
+    .compact-bar .cb-title { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cb-btn {
+      border: 1px solid var(--border-strong); background: #fff; color: var(--text);
+      font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+    }
+    .cb-btn.on { background: var(--active); border-color: transparent; }
+    body.compact-nav-hidden .sidebar { display: none; }
+    body.compact-list-hidden .entries-sidebar.open { display: none; }
+    .sidebar { flex-shrink: 0; }
     .sidebar {
       width: 100%;
       min-width: 0;
@@ -1177,7 +1197,7 @@
     /* collapse is a desktop affordance (no header on mobile) — keep chips visible */
     .note-groups-nav.collapsed .nav-subitem { display: flex; }
     .nav-subitem { width: auto; padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: 14px; white-space: nowrap; }
-    .main { height: auto; }
+    .main { flex: 1; min-height: 0; height: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .page { padding: 24px 16px 90px; }
     .page-title { font-size: 28px; }
     .detail-title-input { font-size: 26px; }
@@ -1202,8 +1222,12 @@
     .p-progress { display: none; }
     .search-input { width: 130px; }
     .prop-label { width: 90px; min-width: 90px; }
-    .entries-sidebar.open { position: static; width: 100%; min-width: 0; height: auto; max-height: 32vh; border-right: none; border-bottom: 1px solid var(--border); }
+    .entries-sidebar.open { position: static; width: 100%; min-width: 0; height: auto; max-height: 40vh; flex-shrink: 0; border-right: none; border-bottom: 1px solid var(--border); }
     .entry-title-input { font-size: 26px; }
+    /* keep the formatting bar reachable while the note scrolls underneath it,
+       and leave room below the text so its top can be scrolled up to the bar */
+    .entry-toolbar { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: 6px; }
+    .entry-body { min-height: 60vh; padding-bottom: 45vh; }
     .chat-msg { max-width: 95%; }
     #reminder-form { flex-wrap: wrap; }
     #reminder-form input[type="text"] { flex: 1 1 100%; }
@@ -1263,6 +1287,16 @@
     <button type="submit" id="auth-submit">Sign in</button>
     <div class="auth-error" id="auth-error"></div>
   </form>
+</div>
+
+<!-- Narrow-screen top bar: the nav header and the entries/projects list are
+     collapsed by default so the note you're writing gets the room; these
+     buttons toggle them. Hidden entirely on wide screens. -->
+<div class="compact-bar" id="compact-bar">
+  <img src="brill-logo.png" alt="">
+  <span class="cb-title" id="compact-title">Tasks</span>
+  <button class="cb-btn" id="compact-list-toggle" data-action="toggle-compact-list" hidden>Entries</button>
+  <button class="cb-btn" id="compact-nav-toggle" data-action="toggle-compact-nav" title="Show or hide the menu">&#9776; Menu</button>
 </div>
 
 <aside class="sidebar">
@@ -1544,6 +1578,40 @@ try { collapsedSections = new Set(JSON.parse(localStorage.getItem(UI_COLLAPSED_K
 const UI_GROUPS_NAV_KEY = "v2-groups-nav-collapsed";
 let noteGroupsNavCollapsed = localStorage.getItem(UI_GROUPS_NAV_KEY) === "true";
 
+
+/* ---------- narrow-screen layout (compact bar) ---------- */
+
+// On narrow screens the nav header and the entries/projects list start hidden
+// so the content gets the room; the compact bar toggles them, and picking
+// something from either panel hides it again.
+const COMPACT_MQ = window.matchMedia("(max-width: 760px)");
+document.body.classList.add("compact-nav-hidden", "compact-list-hidden");   // no effect on wide screens
+
+function isCompact() { return COMPACT_MQ.matches; }
+
+function setCompactNav(show) {
+  document.body.classList.toggle("compact-nav-hidden", !show);
+  document.getElementById("compact-nav-toggle").classList.toggle("on", show);
+}
+
+function setCompactList(show) {
+  document.body.classList.toggle("compact-list-hidden", !show);
+  document.getElementById("compact-list-toggle").classList.toggle("on", show);
+}
+
+function updateCompactBar() {
+  const labels = { tasks: "Tasks", projects: "Projects", personal: "Long Notes", files: "Files", assistant: "Assistant", reminders: "Reminders" };
+  document.getElementById("compact-title").textContent = labels[view] || "";
+  const listBtn = document.getElementById("compact-list-toggle");
+  const hasList = view === "personal" || view === "projects";
+  listBtn.hidden = !hasList;
+  if (view === "personal") {
+    const n = personalItems.filter(i => i && (showArchivedNotes ? i.archived : !i.archived)).length;
+    listBtn.textContent = `Entries · ${n}`;
+  } else if (view === "projects") {
+    listBtn.textContent = "Projects list";
+  }
+}
 
 /* ---------- helpers ---------- */
 
@@ -1839,6 +1907,7 @@ function renderNav() {
   const pendingCount = pendingReminders().length + deliveredReminders().length;
   document.getElementById("nav-reminders-count").textContent = pendingCount || "";
   renderNoteGroupsNav();   // show the group list under Long Notes (hidden in other views)
+  updateCompactBar();
   document.getElementById("sidebar-stats").textContent = `${total - done} open · ${done} done`;
   document.getElementById("tasks-subtitle").textContent =
     `${total - done} open task${total - done === 1 ? "" : "s"} · ${done} completed`;
@@ -2402,6 +2471,7 @@ function newEntry() {
   queueSave();
   renderPersonal();
   renderNav();
+  if (isCompact()) setCompactList(false);
   document.querySelector('[data-role="entry-title"]')?.focus();
 }
 
@@ -3115,7 +3185,9 @@ document.addEventListener("click", e => {
   if (!el) return;
   const a = el.dataset.action;
 
-  if (a === "nav") setView(el.dataset.view);
+  if (a === "nav") { setView(el.dataset.view); if (isCompact()) setCompactNav(false); }
+  if (a === "toggle-compact-nav") setCompactNav(document.body.classList.contains("compact-nav-hidden"));
+  if (a === "toggle-compact-list") setCompactList(document.body.classList.contains("compact-list-hidden"));
   if (a === "chat-suggest") {
     const inp = document.getElementById("chat-input");
     inp.value = el.dataset.text || "";
@@ -3210,6 +3282,7 @@ document.addEventListener("click", e => {
     selectedNoteGroup = el.dataset.group;
     selectedEntryIndex = firstVisibleNoteIndex();
     renderPersonal();
+    if (isCompact()) { setCompactNav(false); setCompactList(true); }   // picked a group: show its entries
   }
   if (a === "toggle-groups-nav") {
     noteGroupsNavCollapsed = !noteGroupsNavCollapsed;
@@ -3219,6 +3292,7 @@ document.addEventListener("click", e => {
   if (a === "select-entry") {
     const idx = Number(el.dataset.idx);
     if (idx !== selectedEntryIndex) { selectedEntryIndex = idx; renderPersonal(); }
+    if (isCompact()) setCompactList(false);   // picked an entry: give it the screen
   }
   if (a === "fmt") {
     document.execCommand(el.dataset.cmd, false, null);
@@ -3247,7 +3321,7 @@ document.addEventListener("click", e => {
   if (a === "toggle-props") { detailPropsOpen = !detailPropsOpen; renderProjectDetail(); }
   if (a === "new-project") openNewTaskDialog();
   if (a === "newtask-cancel") closeNewTaskDialog();
-  if (a === "open-project") { setOverview(false); activeProjectId = el.dataset.id; setView("projects"); }
+  if (a === "open-project") { setOverview(false); activeProjectId = el.dataset.id; setView("projects"); if (isCompact()) setCompactList(false); }
   if (a === "open-note") {
     const idx = personalItems.findIndex(n => n && n.id === el.dataset.id);
     if (idx >= 0) {
