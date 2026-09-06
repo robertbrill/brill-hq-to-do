@@ -14,10 +14,15 @@
  * browser notification — the next time it's open. Dead subscriptions
  * (404/410 from the push service) are removed.
  *
- * Env: CRON_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- *      VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto: or https: URL;
- *      defaults to the production deployment URL).
- * Generate the VAPID pair once with:  npx web-push generate-vapid-keys
+ * Channels (at least one must be configured):
+ *   Web Push  — VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto: or
+ *               https: URL; defaults to the production deployment URL).
+ *               Generate the pair once with:  npx web-push generate-vapid-keys
+ *   SMS       — TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and either TWILIO_FROM_NUMBER
+ *               (your Twilio number, E.164) or TWILIO_MESSAGING_SERVICE_SID. The
+ *               destination is the phone number the user saved in the Reminders
+ *               view (kept in their auth user metadata as sms_phone).
+ * Always: CRON_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
  */
 
 const webpush = require("web-push");
@@ -64,19 +69,49 @@ module.exports = async (req, res) => {
   if (!secret) { res.status(500).json({ error: "CRON_SECRET is not set" }); return; }
   if (bearerToken(req) !== secret) { res.status(401).json({ error: "unauthorized" }); return; }
 
+  const env = process.env;
   const { url, serviceKey } = supabaseEnv();
-  const vapidPublic = process.env.VAPID_PUBLIC_KEY || "";
-  const vapidPrivate = process.env.VAPID_PRIVATE_KEY || "";
-  const subject = process.env.VAPID_SUBJECT
-    || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
-  const missing = [
-    !url && "SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY",
-    !vapidPublic && "VAPID_PUBLIC_KEY", !vapidPrivate && "VAPID_PRIVATE_KEY", !subject && "VAPID_SUBJECT",
-  ].filter(Boolean);
+  const appUrl = env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : "";
+  const vapidPublic = env.VAPID_PUBLIC_KEY || "", vapidPrivate = env.VAPID_PRIVATE_KEY || "";
+  const subject = env.VAPID_SUBJECT || appUrl;
+  const pushEnabled = !!(vapidPublic && vapidPrivate && subject);
+  const twilio = { sid: env.TWILIO_ACCOUNT_SID || "", token: env.TWILIO_AUTH_TOKEN || "", from: env.TWILIO_FROM_NUMBER || "", service: env.TWILIO_MESSAGING_SERVICE_SID || "" };
+  const smsEnabled = !!(twilio.sid && twilio.token && (twilio.from || twilio.service));
+
+  const missing = [!url && "SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean);
+  if (!pushEnabled && !smsEnabled) missing.push("a delivery channel (VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY for push, or TWILIO_* for SMS)");
   if (missing.length) { fail(res, "missing env: " + missing.join(", ")); return; }
 
-  webpush.setVapidDetails(subject, vapidPublic, vapidPrivate);
+  if (pushEnabled) webpush.setVapidDetails(subject, vapidPublic, vapidPrivate);
   const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  // The user's SMS number is stored in their auth metadata (set from the app).
+  const phoneCache = {};
+  async function phoneFor(userId) {
+    if (!smsEnabled) return "";
+    if (userId in phoneCache) return phoneCache[userId];
+    let phone = "";
+    try {
+      const { data } = await db.auth.admin.getUserById(userId);
+      phone = (data && data.user && data.user.user_metadata && data.user.user_metadata.sms_phone) || "";
+    } catch (e) { phone = ""; }
+    return (phoneCache[userId] = /^\+\d{8,15}$/.test(phone) ? phone : "");
+  }
+
+  async function sendSms(to, body) {
+    const params = new URLSearchParams({ To: to, Body: body });
+    if (twilio.service) params.set("MessagingServiceSid", twilio.service); else params.set("From", twilio.from);
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(twilio.sid)}/Messages.json`, {
+      method: "POST",
+      headers: { Authorization: "Basic " + Buffer.from(`${twilio.sid}:${twilio.token}`).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+    if (!r.ok) {
+      let msg = `Twilio HTTP ${r.status}`;
+      try { const j = await r.json(); if (j && j.message) msg += `: ${j.message}`; } catch (e) { /* keep status */ }
+      throw new Error(msg);
+    }
+  }
 
   const now = new Date();
   const { data: due, error } = await db.from("reminders").select("*")
@@ -86,47 +121,61 @@ module.exports = async (req, res) => {
   if (!due || !due.length) { res.status(200).json({ checked: 0, sent: 0 }); return; }
 
   const userIds = [...new Set(due.map((r) => r.user_id))];
-  const { data: subs, error: subErr } = await db.from("push_subscriptions").select("*").in("user_id", userIds);
-  if (subErr) { fail(res, "reading push_subscriptions: " + subErr.message); return; }
   const subsByUser = {};
-  (subs || []).forEach((s) => { (subsByUser[s.user_id] = subsByUser[s.user_id] || []).push(s); });
+  if (pushEnabled) {
+    const { data: subs, error: subErr } = await db.from("push_subscriptions").select("*").in("user_id", userIds);
+    if (subErr) { fail(res, "reading push_subscriptions: " + subErr.message); return; }
+    (subs || []).forEach((s) => { (subsByUser[s.user_id] = subsByUser[s.user_id] || []).push(s); });
+  }
 
   const dead = new Set();
-  let sent = 0, delivered = 0, pendingNoDevice = 0;
+  let sent = 0, smsSent = 0, delivered = 0, pendingNoDevice = 0;
   const failures = [];
 
   for (const r of due) {
     const targets = subsByUser[r.user_id] || [];
-    if (!targets.length) { pendingNoDevice++; continue; }
-    const payload = JSON.stringify({
-      id: r.id, title: r.title || "Reminder", body: r.notes || "",
-      due_at: r.due_at, url: "/?view=reminders",
-    });
-    let ok = 0;
-    await Promise.all(targets.map(async (s) => {
-      try {
-        await webpush.sendNotification(s.subscription, payload, { TTL: 6 * 3600, urgency: "high" });
-        ok++;
-      } catch (e) {
-        const code = e && e.statusCode;
-        if (code === 404 || code === 410) dead.add(s.id);   // subscription expired / unsubscribed
-        else failures.push({ reminder: r.id, status: code || 0, message: e && e.body ? String(e.body).slice(0, 200) : String(e && e.message) });
-      }
-    }));
-    if (!ok) continue;   // leave it pending; the app shows it when opened
-    sent += ok;
+    const phone = await phoneFor(r.user_id);
+    if (!targets.length && !phone) { pendingNoDevice++; continue; }
+    const title = r.title || "Reminder";
+    const via = [];
+
+    // Web Push to every enabled device
+    if (targets.length) {
+      const payload = JSON.stringify({ id: r.id, title, body: r.notes || "", due_at: r.due_at, url: "/?view=reminders" });
+      let ok = 0;
+      await Promise.all(targets.map(async (s) => {
+        try {
+          await webpush.sendNotification(s.subscription, payload, { TTL: 6 * 3600, urgency: "high" });
+          ok++;
+        } catch (e) {
+          const code = e && e.statusCode;
+          if (code === 404 || code === 410) dead.add(s.id);   // subscription expired / unsubscribed
+          else failures.push({ reminder: r.id, channel: "push", status: code || 0, message: e && e.body ? String(e.body).slice(0, 200) : String(e && e.message) });
+        }
+      }));
+      if (ok) { sent += ok; via.push("push"); }
+    }
+
+    // SMS to the saved number
+    if (phone) {
+      const text = `Reminder: ${title}${r.notes ? "\n" + String(r.notes).slice(0, 300) : ""}${appUrl ? "\n" + appUrl + "/?view=reminders" : ""}`;
+      try { await sendSms(phone, text); smsSent++; via.push("sms"); }
+      catch (e) { failures.push({ reminder: r.id, channel: "sms", message: String(e && e.message).slice(0, 200) }); }
+    }
+
+    if (!via.length) continue;   // nothing got through: leave it pending; the app shows it when opened
     delivered++;
     const next = r.repeat && r.repeat !== "none" ? nextOccurrence(r.due_at, r.repeat, now) : null;
     const patch = next
-      ? { due_at: next, fired_at: null, last_fired_at: now.toISOString(), fired_via: "push" }
-      : { fired_at: now.toISOString(), last_fired_at: now.toISOString(), fired_via: "push" };
+      ? { due_at: next, fired_at: null, last_fired_at: now.toISOString(), fired_via: via.join("+") }
+      : { fired_at: now.toISOString(), last_fired_at: now.toISOString(), fired_via: via.join("+") };
     const { error: upErr } = await db.from("reminders").update(patch).eq("id", r.id);
     if (upErr) failures.push({ reminder: r.id, message: upErr.message });
   }
 
   if (dead.size) await db.from("push_subscriptions").delete().in("id", [...dead]);
 
-  const summary = { checked: due.length, delivered, sent, pendingNoDevice, removedSubscriptions: dead.size, failures };
+  const summary = { checked: due.length, delivered, pushSent: sent, smsSent, pendingNoDevice, removedSubscriptions: dead.size, failures };
   if (failures.length) console.warn("[send-reminders]", JSON.stringify(summary));
   res.status(200).json(summary);
 };

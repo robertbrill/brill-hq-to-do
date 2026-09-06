@@ -263,6 +263,7 @@
         id: r.id, task: r.task || "", priority: r.priority || "normal",
         project: r.project || "", notes: r.notes || "", routed: !!r.routed,
         added: r.added ? new Date(r.added).toLocaleString() : "",
+        addedAt: r.added || "",          // ISO, for sorting by date created
       }));
     },
 
@@ -483,6 +484,19 @@
     async deleteReminder(id) {
       await ensureUser();
       const { error } = await client.from("reminders").delete().eq("id", String(id));
+      if (error) throw error;
+    },
+
+    /* ---------- SMS reminders: the phone number lives in the auth user's metadata ---------- */
+
+    async getSmsPhone() {
+      const { data } = await client.auth.getUser();
+      const meta = data && data.user ? data.user.user_metadata || {} : {};
+      return meta.sms_phone || "";
+    },
+
+    async setSmsPhone(phone) {
+      const { error } = await client.auth.updateUser({ data: { sms_phone: String(phone || "").trim() } });
       if (error) throw error;
     },
 

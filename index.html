@@ -1074,6 +1074,16 @@
   .search-more { font-size: 12px; color: var(--faint); padding: 4px 10px 8px; }
 
   /* ============ Mobile ============ */
+  .sort-select {
+    border: none; background: var(--sidebar); font: inherit; font-size: 13px; color: var(--muted);
+    padding: 5px 8px; border-radius: var(--radius); outline: none; cursor: pointer;
+  }
+  .task-section-tag { display: inline-flex; align-items: center; gap: 5px; }
+  .task-section-tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dot, var(--faint)); }
+  #sms-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #sms-form input { border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; font-size: 14px; padding: 6px 10px; width: 190px; }
+  #sms-form input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+
   /* compact top bar exists only on narrow screens (see the media block) */
   .compact-bar { display: none; }
 
@@ -1386,6 +1396,11 @@
       <button class="tab" data-action="filter" data-filter="archived">Archived</button>
       <div class="controls-spacer"></div>
       <input class="search-input" id="search-input" type="search" placeholder="Search&hellip;">
+      <select class="sort-select" id="task-sort" title="Sort tasks">
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="section">By section</option>
+      </select>
       <div class="menu-wrap">
         <button class="icon-btn" data-action="toggle-menu" title="More options">&#8943;</button>
         <div class="menu">
@@ -1439,6 +1454,7 @@
     <div class="page-title">Reminders</div>
     <div class="page-subtitle" id="reminders-subtitle"></div>
     <div class="push-card" id="push-card"></div>
+    <div class="push-card" id="sms-card"></div>
     <form class="quick-add" id="reminder-form">
       <span class="plus">&#9200;</span>
       <input type="text" id="reminder-title" placeholder="Remind me to&hellip;" autocomplete="off">
@@ -1553,6 +1569,7 @@ let selectedEntryIndex = 0;
 
 let view = "tasks";            // tasks | projects | detail
 let taskFilter = "active";     // active | completed | all
+let taskSort = localStorage.getItem("v2-task-sort") || "newest";   // newest | oldest | section
 let searchQuery = "";
 let projectSearchQuery = "";
 let statusFilter = "Active";
@@ -1865,8 +1882,9 @@ function getAllSections() {
       const task = typeof item === "string" ? item : item.task || "";
       const priority = (typeof item === "object" && item.priority) ? item.priority : "normal";
       const added = (typeof item === "object" && item.added) ? item.added : "";
+      const addedAt = (typeof item === "object" && item.addedAt) ? item.addedAt : "";
       if (!grouped[priority]) grouped[priority] = [];
-      grouped[priority].push({ task, added });
+      grouped[priority].push({ task, added, addedAt });
     });
     Object.keys(grouped)
       .sort((a, b) => (PRIORITY_CONFIG[a]?.order ?? 2) - (PRIORITY_CONFIG[b]?.order ?? 2))
@@ -1877,7 +1895,8 @@ function getAllSections() {
           title: "Inbox — " + cfg.title,
           color: cfg.color,
           items: grouped[priority].map(i => i.task),
-          dates: grouped[priority].map(i => i.added)
+          dates: grouped[priority].map(i => i.added),
+          stamps: grouped[priority].map(i => i.addedAt)   // ISO created time, for date sorting
         });
       });
   }
@@ -1939,7 +1958,7 @@ function setView(next) {
 
 /* ---------- rendering: tasks ---------- */
 
-function taskRowHtml(section, idx) {
+function taskRowHtml(section, idx, showSection) {
   const key = taskKey(section.id, idx);
   const isDone = !!completed[key];
   const text = edits[key] || section.items[idx];
@@ -1953,6 +1972,7 @@ function taskRowHtml(section, idx) {
     body = `<input class="task-edit-input" id="edit-input" value="${escHtml(text)}" data-key="${escHtml(key)}">`;
   } else {
     const metaBits = [];
+    if (showSection) metaBits.push(`<span class="task-section-tag" style="--dot:${escHtml(section.color || "#9b9a97")}">${escHtml(section.title)}</span>`);
     if (date) metaBits.push(`<span>${escHtml(date)}</span>`);
     if (hasNotes && !notesOpen) metaBits.push(`<span class="note-preview">&#128221; ${escHtml(noteText.split("\n")[0].slice(0, 80))}</span>`);
     body = `<span class="task-text">${escHtml(text)}</span>` +
@@ -1997,9 +2017,13 @@ function renderTasks() {
   const q = searchQuery.trim().toLowerCase();
   let html = "";
   let shown = 0;
+  const sortSel = document.getElementById("task-sort");
+  if (sortSel && sortSel.value !== taskSort) sortSel.value = taskSort;
 
-  getAllSections().forEach(section => {
-    const rows = [];
+  // which rows pass the current tab + search
+  const sections = getAllSections();   // built once: inbox groups are fresh objects each call
+  const visible = [];   // { section, idx, stamp }
+  sections.forEach(section => {
     section.items.forEach((item, idx) => {
       const key = taskKey(section.id, idx);
       if (deleted[key]) return;
@@ -2014,21 +2038,37 @@ function renderTasks() {
       const text = (edits[key] || item || "").toLowerCase();
       const note = (notes[key] || "").toLowerCase();
       if (q && !text.includes(q) && !note.includes(q)) return;
-      rows.push(taskRowHtml(section, idx));
+      const stamp = section.stamps ? Date.parse(section.stamps[idx] || "") : NaN;
+      visible.push({ section, idx, stamp: Number.isNaN(stamp) ? null : stamp });
     });
-    if (!rows.length) return;
-    shown += rows.length;
-    const isCollapsed = collapsedSections.has(section.id) && !q;
-    html += `<div class="section ${isCollapsed ? "collapsed" : ""}" data-section-id="${escHtml(section.id)}">
-      <div class="section-header" data-action="toggle-section" data-section="${escHtml(section.id)}">
-        <span class="section-caret">&#9662;</span>
-        <span class="section-dot" style="background:${escHtml(section.color || "#9b9a97")}"></span>
-        <span class="section-title">${escHtml(section.title)}</span>
-        <span class="section-count">${rows.length}</span>
-      </div>
-      <div class="section-body">${rows.join("")}</div>
-    </div>`;
   });
+  shown = visible.length;
+
+  if (taskSort === "section") {
+    // grouped under collapsible section headers (the original layout)
+    sections.forEach(section => {
+      const rows = visible.filter(v => v.section.id === section.id).map(v => taskRowHtml(section, v.idx));
+      if (!rows.length) return;
+      const isCollapsed = collapsedSections.has(section.id) && !q;
+      html += `<div class="section ${isCollapsed ? "collapsed" : ""}" data-section-id="${escHtml(section.id)}">
+        <div class="section-header" data-action="toggle-section" data-section="${escHtml(section.id)}">
+          <span class="section-caret">&#9662;</span>
+          <span class="section-dot" style="background:${escHtml(section.color || "#9b9a97")}"></span>
+          <span class="section-title">${escHtml(section.title)}</span>
+          <span class="section-count">${rows.length}</span>
+        </div>
+        <div class="section-body">${rows.join("")}</div>
+      </div>`;
+    });
+  } else if (shown) {
+    // one flat list by date created. Tasks without a known date (the original
+    // base list) keep their own order and go last.
+    const dated = visible.filter(v => v.stamp !== null);
+    const undated = visible.filter(v => v.stamp === null);
+    dated.sort((a, b) => taskSort === "oldest" ? a.stamp - b.stamp : b.stamp - a.stamp);
+    const ordered = taskSort === "oldest" ? [...undated, ...dated] : [...dated, ...undated];
+    html = `<div class="section"><div class="section-body">${ordered.map(v => taskRowHtml(v.section, v.idx, true)).join("")}</div></div>`;
+  }
 
   if (!shown) {
     html = `<div class="empty-note">${q ? "No tasks match your search." :
@@ -3205,6 +3245,7 @@ document.addEventListener("click", e => {
   if (a === "reminder-snooze") snoozeReminder(el.dataset.id, 60);
   if (a === "reminder-delete") deleteReminder(el.dataset.id);
   if (a === "push-enable") enablePush();
+  if (a === "sms-clear") saveSmsPhone("");
   if (a === "push-disable") disablePush();
   if (a === "filter") { taskFilter = el.dataset.filter; syncFilterTabs(); renderTasks(); }
   if (a === "status-filter") {
@@ -3717,7 +3758,7 @@ window.addEventListener("drop", e => { if (dragHasFiles(e)) e.preventDefault(); 
 /* ---------- init ---------- */
 
 async function init() {
-  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks(), loadReminders(), refreshPushDevices()]);
+  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks(), loadReminders(), refreshPushDevices(), loadSmsPhone()]);
   await detectPushState();
   routeInboxItems();
   // give every note a stable id so files can attach to it across sessions;
@@ -3747,6 +3788,7 @@ async function init() {
 let reminders = [];                  // rows from the reminders table (pending, delivered and done)
 let pushStatus = "unknown";           // unsupported | denied | off | on
 let pushDevices = 0;                 // how many devices this user has enabled push on (any device)
+let smsPhone = "";                   // E.164 number reminders are texted to (stored in the auth user's metadata)
 const notifiedReminderIds = new Set();  // reminders we've already toasted this session
 const REMINDER_POLL_MS = 30000;
 const REPEAT_LABEL = { daily: "Daily", weekdays: "Weekdays", weekly: "Weekly", monthly: "Monthly" };
@@ -3878,7 +3920,9 @@ async function checkDueReminders() {
   const now = Date.now();
   const due = reminders.filter(r => !r.done && !r.firedAt && reminderTime(r) <= now);
   if (!due.length) return;
-  const pushHandles = pushDevices > 0 && !!(window.BRILL_SUPABASE || {}).vapidPublicKey;
+  const cfg = window.BRILL_SUPABASE || {};
+  // the server cron delivers (and marks) reminders when it has a channel to this user
+  const pushHandles = (pushDevices > 0 && !!cfg.vapidPublicKey) || (!!smsPhone && !!cfg.sms);
   let changed = false;
   for (const r of due) {
     if (notifiedReminderIds.has(r.id)) continue;
@@ -3923,6 +3967,51 @@ async function detectPushState() {
     // keep the server's copy fresh (endpoints can rotate) — harmless if unchanged
     if (sub && pushStatus === "on") BrillDB.savePushSubscription(sub.toJSON()).catch(() => {});
   } catch (e) { pushStatus = "off"; }
+}
+
+async function loadSmsPhone() {
+  try { smsPhone = await BrillDB.getSmsPhone(); } catch (e) { /* keep what we have */ }
+}
+
+// Accept "+1 (310) 555-0123", "310-555-0123" (assumed US) etc.; return E.164 or "".
+function normalizePhone(raw) {
+  const digits = String(raw || "").replace(/[^\d+]/g, "");
+  if (/^\+\d{8,15}$/.test(digits)) return digits;
+  const plain = digits.replace(/\D/g, "");
+  if (plain.length === 10) return "+1" + plain;
+  if (plain.length === 11 && plain.startsWith("1")) return "+" + plain;
+  return "";
+}
+
+async function saveSmsPhone(raw) {
+  const cleared = !String(raw || "").trim();
+  const phone = cleared ? "" : normalizePhone(raw);
+  if (!cleared && !phone) { showToast("Enter the number with country code, e.g. +1 310 555 0123"); return; }
+  try {
+    await BrillDB.setSmsPhone(phone);
+    smsPhone = phone;
+    showToast(phone ? `Reminders will be texted to ${phone}` : "Text-message reminders turned off");
+  } catch (e) {
+    showToast("Couldn't save the number: " + ((e && e.message) || "error"));
+  }
+  renderSmsCard();
+}
+
+function renderSmsCard() {
+  const el = document.getElementById("sms-card");
+  if (!el) return;
+  const cfg = window.BRILL_SUPABASE || {};
+  const form = `<form id="sms-form">
+      <input type="tel" id="sms-phone" placeholder="+1 310 555 0123" value="${escHtml(smsPhone)}" autocomplete="tel">
+      <button class="new-btn primary" type="submit">Save</button>
+      ${smsPhone ? `<button class="new-btn" type="button" data-action="sms-clear">Turn off</button>` : ""}
+    </form>`;
+  const status = !cfg.sms
+    ? `<b>Text messages aren't set up on the server yet</b> (Twilio keys). Save your number now and texts start as soon as they are — see supabase/MIGRATION.md.`
+    : smsPhone
+      ? `<b>Text-message reminders are on.</b> Due reminders are texted to ${escHtml(smsPhone)}.`
+      : `<b>Get reminders by text.</b> Save your mobile number (with country code) and each due reminder is texted to it.`;
+  el.innerHTML = `<div class="push-text">${status}</div>${form}`;
 }
 
 async function refreshPushDevices() {
@@ -4006,6 +4095,7 @@ function renderReminders() {
   document.getElementById("reminders-subtitle").textContent =
     `${pend.length} upcoming${deliv.length ? ` · ${deliv.length} waiting for you` : ""}`;
   renderPushCard();
+  renderSmsCard();
   const row = (r, kind) => {
     const isDue = kind === "pending" && reminderTime(r) <= now;
     return `<div class="rem-row ${kind}${isDue ? " due" : ""}">
@@ -4336,6 +4426,14 @@ document.getElementById("chat-mic").addEventListener("click", toggleDictation);
 document.getElementById("reminder-form").addEventListener("submit", e => {
   e.preventDefault();
   addReminderFromForm();
+});
+document.addEventListener("submit", e => {
+  if (e.target && e.target.id === "sms-form") { e.preventDefault(); saveSmsPhone(document.getElementById("sms-phone").value); }
+});
+document.getElementById("task-sort").addEventListener("change", e => {
+  taskSort = e.target.value;
+  try { localStorage.setItem("v2-task-sort", taskSort); } catch (err) {}
+  renderTasks();
 });
 
 /* ---------- auth gate + boot ---------- */

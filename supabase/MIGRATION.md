@@ -116,6 +116,8 @@ new parts are the `reminders` and `push_subscriptions` tables (RLS, owned by
 | `CRON_SECRET` | `api/send-reminders.js` | Any long random string (`openssl rand -hex 32`). Vercel sends it as the bearer token on cron calls; the function refuses anything else. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | push | Generate once: `npx web-push generate-vapid-keys`. The public half is also served to the browser via `/config.js`. |
 | `VAPID_SUBJECT` | push | Optional. `mailto:you@example.com` or an https URL; defaults to the production deployment URL. |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | SMS | From the Twilio Console home page. Enables text-message reminders. |
+| `TWILIO_FROM_NUMBER` | SMS | Your Twilio phone number in E.164 form (`+13105550123`). Or set `TWILIO_MESSAGING_SERVICE_SID` instead. |
 
 Redeploy after adding them (env vars are read at deploy time for the cron
 schedule and at request time for the rest).
@@ -133,6 +135,14 @@ schedule and at request time for the rest).
   **Add to Home Screen**, open HQ Tasks from the icon, then enable
   notifications inside it. (`manifest.webmanifest` + the iOS meta tags in
   `index.html` make it installable.)
+- **Text messages**: with the Twilio variables set, each due reminder is also
+  texted to the number you save under **Reminders → Get reminders by text**
+  (stored in your login's user metadata, not in a table). A reminder counts as
+  delivered if either the push or the text went out. Twilio notes: a trial
+  account can only text numbers you've verified in the Twilio console (fine for
+  a single-user app); a paid US long-code number needs A2P 10DLC registration
+  or texts get filtered, so a toll-free number (with its one-time verification)
+  is the simpler choice.
 - Repeating reminders (daily / weekdays / weekly / monthly) roll forward to the
   next occurrence after each delivery.
 

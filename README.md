@@ -67,7 +67,9 @@ the caller's Supabase access token before returning anything. The old public
   While the app is open, due reminders pop up as a toast + browser notification.
   Turn on **Enable notifications on this device** to also get them when the app
   is closed (Web Push, delivered by the `api/send-reminders.js` cron). On iPhone
-  add the app to the Home Screen first.
+  add the app to the Home Screen first. Save a mobile number under **Get
+  reminders by text** to have them texted too (Twilio).
+- **Tasks** can be sorted newest / oldest by date created, or grouped by section.
 
 Setup (env vars, the two new tables, VAPID keys) is in
 [`supabase/MIGRATION.md`](supabase/MIGRATION.md#assistant--reminders-setup).
