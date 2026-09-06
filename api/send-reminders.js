@@ -19,15 +19,17 @@
  *               https: URL; defaults to the production deployment URL).
  *               Generate the pair once with:  npx web-push generate-vapid-keys
  *   SMS       — TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and either TWILIO_FROM_NUMBER
- *               (your Twilio number, E.164) or TWILIO_MESSAGING_SERVICE_SID. The
- *               destination is the phone number the user saved in the Reminders
- *               view (kept in their auth user metadata as sms_phone).
+ *               (your Twilio number, E.164) or TWILIO_MESSAGING_SERVICE_SID. Texts go
+ *               only to a number the user enrolled in the Reminders view AND
+ *               confirmed by replying YES (app_metadata.sms.status = "confirmed";
+ *               see api/sms-optin.js and api/sms-inbound.js).
  * Always: CRON_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
  */
 
 const webpush = require("web-push");
 const { createClient } = require("@supabase/supabase-js");
 const { supabaseEnv, bearerToken } = require("../lib/verify-user");
+const smsLib = require("../lib/sms");
 
 const BATCH = 200;
 
@@ -75,8 +77,7 @@ module.exports = async (req, res) => {
   const vapidPublic = env.VAPID_PUBLIC_KEY || "", vapidPrivate = env.VAPID_PRIVATE_KEY || "";
   const subject = env.VAPID_SUBJECT || appUrl;
   const pushEnabled = !!(vapidPublic && vapidPrivate && subject);
-  const twilio = { sid: env.TWILIO_ACCOUNT_SID || "", token: env.TWILIO_AUTH_TOKEN || "", from: env.TWILIO_FROM_NUMBER || "", service: env.TWILIO_MESSAGING_SERVICE_SID || "" };
-  const smsEnabled = !!(twilio.sid && twilio.token && (twilio.from || twilio.service));
+  const smsEnabled = smsLib.twilioEnv().enabled;
 
   const missing = [!url && "SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean);
   if (!pushEnabled && !smsEnabled) missing.push("a delivery channel (VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY for push, or TWILIO_* for SMS)");
@@ -85,7 +86,7 @@ module.exports = async (req, res) => {
   if (pushEnabled) webpush.setVapidDetails(subject, vapidPublic, vapidPrivate);
   const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  // The user's SMS number is stored in their auth metadata (set from the app).
+  // Only a number the user enrolled AND confirmed by replying YES gets texts.
   const phoneCache = {};
   async function phoneFor(userId) {
     if (!smsEnabled) return "";
@@ -93,24 +94,10 @@ module.exports = async (req, res) => {
     let phone = "";
     try {
       const { data } = await db.auth.admin.getUserById(userId);
-      phone = (data && data.user && data.user.user_metadata && data.user.user_metadata.sms_phone) || "";
+      const sms = data && data.user && data.user.app_metadata ? data.user.app_metadata.sms : null;
+      if (sms && sms.status === "confirmed" && smsLib.isE164(sms.phone)) phone = sms.phone;
     } catch (e) { phone = ""; }
-    return (phoneCache[userId] = /^\+\d{8,15}$/.test(phone) ? phone : "");
-  }
-
-  async function sendSms(to, body) {
-    const params = new URLSearchParams({ To: to, Body: body });
-    if (twilio.service) params.set("MessagingServiceSid", twilio.service); else params.set("From", twilio.from);
-    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(twilio.sid)}/Messages.json`, {
-      method: "POST",
-      headers: { Authorization: "Basic " + Buffer.from(`${twilio.sid}:${twilio.token}`).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-    if (!r.ok) {
-      let msg = `Twilio HTTP ${r.status}`;
-      try { const j = await r.json(); if (j && j.message) msg += `: ${j.message}`; } catch (e) { /* keep status */ }
-      throw new Error(msg);
-    }
+    return (phoneCache[userId] = phone);
   }
 
   const now = new Date();
@@ -158,8 +145,7 @@ module.exports = async (req, res) => {
 
     // SMS to the saved number
     if (phone) {
-      const text = `Reminder: ${title}${r.notes ? "\n" + String(r.notes).slice(0, 300) : ""}${appUrl ? "\n" + appUrl + "/?view=reminders" : ""}`;
-      try { await sendSms(phone, text); smsSent++; via.push("sms"); }
+      try { await smsLib.sendSms(phone, smsLib.messages().reminder(title, r.notes)); smsSent++; via.push("sms"); }
       catch (e) { failures.push({ reminder: r.id, channel: "sms", message: String(e && e.message).slice(0, 200) }); }
     }
 

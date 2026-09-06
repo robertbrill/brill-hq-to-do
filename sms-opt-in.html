@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brill HQ Reminders — SMS Program &amp; Opt-In</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<style>
+  :root { --text:#37352f; --muted:#787774; --faint:#9b9a97; --border:rgba(0,0,0,.08); --blue:#2383e2; --bg:#f7f7f5; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; color:var(--text); background:#fff; line-height:1.55; font-size:15px; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 24px 80px; }
+  header { display:flex; align-items:center; gap:14px; margin-bottom: 28px; }
+  header img { height: 36px; }
+  header .kicker { font-size: 12px; text-transform: uppercase; letter-spacing:.06em; color: var(--faint); font-weight:600; }
+  h1 { font-size: 30px; margin: 0; letter-spacing:-.01em; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  p, li { color: var(--text); }
+  .card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin: 12px 0; }
+  .msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px; background:#fff; border:1px solid var(--border); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; margin: 6px 0 14px; }
+  .label { font-size: 12px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing:.05em; }
+  .mock { border:1px solid rgba(0,0,0,.14); border-radius: 10px; padding: 14px 16px; background:#fff; }
+  .mock .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom: 10px; }
+  .mock input[type=tel] { border:1px solid rgba(0,0,0,.14); border-radius: 8px; padding: 7px 10px; font: inherit; font-size:14px; width: 200px; }
+  .mock button { border:none; background: var(--blue); color:#fff; font: inherit; font-weight:600; font-size:14px; padding: 8px 14px; border-radius: 8px; }
+  .mock label { display:flex; gap:8px; align-items:flex-start; font-size: 12.5px; color: var(--muted); }
+  .mock label input { margin-top: 3px; }
+  a { color: var(--blue); }
+  footer { margin-top: 40px; font-size: 12.5px; color: var(--faint); border-top: 1px solid var(--border); padding-top: 14px; }
+  table { border-collapse: collapse; width:100%; font-size: 14px; }
+  td, th { text-align:left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing:.05em; color: var(--faint); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="brill-logo.png" alt="Brill Media">
+    <div>
+      <div class="kicker">Brill Media &middot; SMS program disclosure</div>
+      <h1>Brill HQ Reminders</h1>
+    </div>
+  </header>
+
+  <p><b>What this program is.</b> Brill HQ is Brill Media's private task, project and notes app. <b>Brill HQ Reminders</b> is its optional text-message feature: when you schedule a reminder in the app ("remind me Friday at 9 to send the invoice"), a text message with that reminder is sent to your own mobile number at the time you chose. Nothing else is ever sent &mdash; no marketing, no promotions, and only to the account holder's own number.</p>
+
+  <h2>How to opt in</h2>
+  <div class="card">
+    <div class="label">Option A &mdash; in the app (web form)</div>
+    <p>Signed-in users open <b>Reminders &rarr; Get reminders by text</b>, enter their mobile number, tick the consent box shown below, and tap <b>Send confirmation text</b>. This is the exact form:</p>
+    <div class="mock" id="form-mock">
+      <div class="row">
+        <input type="tel" placeholder="+1 310 555 0123" disabled>
+        <button type="button" disabled>Send confirmation text</button>
+      </div>
+      <label><input type="checkbox" disabled>
+        <span>By checking this box and tapping Send, I agree to receive recurring automated reminder text messages from <b>Brill HQ Reminders</b> at the number provided. Consent is not a condition of purchase. Message frequency varies (one text per reminder I schedule). Msg &amp; data rates may apply. Reply HELP for help or STOP to cancel at any time. See the <a href="/sms-terms.html">SMS Terms</a> and <a href="/sms-privacy.html">Privacy Policy</a>.</span>
+      </label>
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Option B &mdash; by text (keyword)</div>
+    <p>From the mobile phone you added in the app, text the keyword <b>REMIND</b> to <b data-sms-number>the Brill HQ Reminders toll-free number</b>. The keyword is also shown on the enrollment card inside the app.</p>
+  </div>
+
+  <h2>Final confirmation (double opt-in)</h2>
+  <p>Either way, enrollment is not complete until the user replies <b>YES</b> to this confirmation request sent to their phone:</p>
+  <div class="label">Confirmation request</div>
+  <div class="msg">Brill HQ Reminders: Reply YES to confirm you want your scheduled reminders texted to this number. Msg frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to cancel. Terms: <span data-app-url>https://brill-hq-to-do.vercel.app</span>/sms-terms.html</div>
+  <div class="label">Welcome / confirmation message (sent after YES)</div>
+  <div class="msg">Brill HQ Reminders: You're confirmed. We'll text you each reminder you schedule in Brill HQ. Msg frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to cancel. Terms: <span data-app-url>https://brill-hq-to-do.vercel.app</span>/sms-terms.html</div>
+
+  <h2>Messages you will receive</h2>
+  <div class="label">Example reminder</div>
+  <div class="msg">Brill HQ Reminders: Send the BSH invoice
+Bruno promised Friday
+<span data-app-url>https://brill-hq-to-do.vercel.app</span>/?view=reminders
+Reply STOP to cancel.</div>
+  <table>
+    <tr><th>Frequency</th><td>Varies. One text per reminder the user schedules; a repeating reminder sends one text per occurrence. Typical use is a few messages per week.</td></tr>
+    <tr><th>Cost</th><td>Message and data rates may apply according to the user's mobile plan. Brill Media does not charge for the service.</td></tr>
+    <tr><th>Help</th><td>Reply <b>HELP</b> to any message for program information and support contact, or email <span data-sms-contact>the account contact listed in the app</span>.</td></tr>
+    <tr><th>Stop</th><td>Reply <b>STOP</b> at any time to cancel. One final message confirms the opt-out and no further texts are sent. Texts can also be turned off in the app under Reminders.</td></tr>
+    <tr><th>Terms &amp; privacy</th><td><a href="/sms-terms.html">SMS Terms &amp; Conditions</a> &middot; <a href="/sms-privacy.html">Privacy Policy</a></td></tr>
+  </table>
+  <div class="label" style="margin-top:14px">HELP response</div>
+  <div class="msg">Brill HQ Reminders: We text you the reminders you schedule in your Brill HQ account. Support: <span data-sms-contact>see the app</span>. Msg frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to cancel.</div>
+  <div class="label">STOP response</div>
+  <div class="msg">Brill HQ Reminders: You've been unsubscribed and will receive no further texts. Reply START to re-subscribe.</div>
+
+  <p><b>Standard disclaimers.</b> Carriers are not liable for delayed or undelivered messages. Consent to receive texts is not a condition of any purchase. Mobile numbers and consent records are used only to deliver this program and are never sold or shared with third parties or affiliates for marketing or promotional purposes.</p>
+
+  <footer>Brill Media &middot; Brill HQ Reminders &middot; <a href="/sms-terms.html">SMS Terms</a> &middot; <a href="/sms-privacy.html">Privacy Policy</a> &middot; <a href="/">Sign in to Brill HQ</a></footer>
+</main>
+<script src="/config.js"></script>
+<script>
+  (function () {
+    var cfg = window.BRILL_SUPABASE || {};
+    var origin = location.origin;
+    document.querySelectorAll("[data-app-url]").forEach(function (el) { el.textContent = origin; });
+    if (cfg.smsNumber) document.querySelectorAll("[data-sms-number]").forEach(function (el) { el.textContent = cfg.smsNumber; });
+    if (cfg.smsContact) document.querySelectorAll("[data-sms-contact]").forEach(function (el) { el.textContent = cfg.smsContact; });
+  })();
+</script>
+</body>
+</html>

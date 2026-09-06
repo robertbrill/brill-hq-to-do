@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brill HQ — Privacy Policy</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<style>
+  body { margin:0; font-family: ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; color:#37352f; line-height:1.55; font-size:15px; }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+  header { display:flex; align-items:center; gap:14px; margin-bottom: 24px; } header img { height: 36px; }
+  h1 { font-size: 28px; margin: 0; } h2 { font-size: 17px; margin: 26px 0 6px; }
+  .kicker { font-size: 12px; text-transform: uppercase; letter-spacing:.06em; color:#9b9a97; font-weight:600; }
+  a { color:#2383e2; } footer { margin-top: 40px; font-size: 12.5px; color:#9b9a97; border-top:1px solid rgba(0,0,0,.08); padding-top: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header><img src="brill-logo.png" alt="Brill Media"><div><div class="kicker">Brill Media</div><h1>Brill HQ &mdash; Privacy Policy</h1></div></header>
+  <p>Last updated: September 2026</p>
+
+  <p>Brill HQ is a private productivity application operated by Brill Media for its own account holders. This policy explains what information the app handles and how it is used.</p>
+
+  <h2>Information we collect</h2>
+  <ul>
+    <li><b>Account information:</b> the email address and password used to sign in.</li>
+    <li><b>Content you create:</b> tasks, projects, long notes, reminders and uploaded files. This content belongs to you and is visible only to your account.</li>
+    <li><b>Mobile number (optional):</b> if you enroll in Brill HQ Reminders text messages, the mobile number you provide, the date and time you consented, and whether you confirmed by replying YES.</li>
+    <li><b>Notification subscriptions (optional):</b> if you enable browser notifications, a push-subscription token for that device.</li>
+  </ul>
+
+  <h2>How we use it</h2>
+  <ul>
+    <li>To store and display your content and keep it in sync across your devices.</li>
+    <li>To deliver the reminders you schedule, by browser notification and, if enrolled, by text message.</li>
+    <li>If you use the Assistant, the text you type and a summary of your workspace (project names, note titles, pending reminder titles and the current time) is sent to Anthropic's API so it can file your request. Note bodies and task lists are not sent, and no chat history is stored on our servers.</li>
+  </ul>
+
+  <h2>Text messaging</h2>
+  <p>Text messages are sent through Twilio, our messaging service provider, solely to deliver reminders you created. <b>Mobile information will not be shared with third parties or affiliates for marketing or promotional purposes.</b> Information sharing to subcontractors in support services, such as customer service, is permitted. All other use-case categories exclude text-messaging originator opt-in data and consent; this information will not be shared with any third parties. You can stop text messages at any time by replying STOP or by turning texts off in the app.</p>
+
+  <h2>Storage and security</h2>
+  <p>Data is stored with Supabase (database and file storage) and served through Vercel. Every record is protected by row-level security so it is readable only by the account that created it. Secrets used to send messages are held server-side and never exposed to the browser.</p>
+
+  <h2>Retention and deletion</h2>
+  <p>Your content is kept until you delete it in the app. Your mobile number and consent record are kept while you are enrolled and removed when you opt out. Contact us to request deletion of an account.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy or the text-message program: <span data-sms-contact>contact the account owner through the Brill HQ app</span>.</p>
+
+  <footer>Brill Media &middot; <a href="/sms-opt-in.html">SMS program &amp; opt-in details</a> &middot; <a href="/sms-terms.html">SMS Terms</a></footer>
+</main>
+<script src="/config.js"></script>
+<script>
+  (function () { var cfg = window.BRILL_SUPABASE || {};
+    if (cfg.smsContact) document.querySelectorAll("[data-sms-contact]").forEach(function (el) { el.textContent = cfg.smsContact; }); })();
+</script>
+</body>
+</html>

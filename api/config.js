@@ -25,8 +25,10 @@ module.exports = (req, res) => {
   const vapidPublicKey = env.VAPID_PUBLIC_KEY || "";
   const assistant = !!env.ANTHROPIC_API_KEY;
   const sms = !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && (env.TWILIO_FROM_NUMBER || env.TWILIO_MESSAGING_SERVICE_SID));
+  const smsNumber = env.TWILIO_FROM_NUMBER || "";          // shown in the opt-in copy ("text REMIND to …")
+  const smsContact = env.SMS_CONTACT_EMAIL || "";          // support contact shown in SMS terms / HELP
 
   res.setHeader("Content-Type", "application/javascript; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  res.status(200).send(`window.BRILL_SUPABASE = ${JSON.stringify({ url, anonKey, vapidPublicKey, assistant, sms })};`);
+  res.status(200).send(`window.BRILL_SUPABASE = ${JSON.stringify({ url, anonKey, vapidPublicKey, assistant, sms, smsNumber, smsContact })};`);
 };

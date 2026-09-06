@@ -1080,9 +1080,15 @@
   }
   .task-section-tag { display: inline-flex; align-items: center; gap: 5px; }
   .task-section-tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dot, var(--faint)); }
-  #sms-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  #sms-form input { border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; font-size: 14px; padding: 6px 10px; width: 190px; }
-  #sms-form input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  #sms-card { flex-direction: column; align-items: stretch; gap: 10px; }
+  #sms-form { display: flex; flex-direction: column; gap: 8px; }
+  .sms-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .sms-row input { border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; font-size: 14px; padding: 6px 10px; width: 200px; background: #fff; }
+  .sms-row input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .sms-consent { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--muted); line-height: 1.45; cursor: pointer; }
+  .sms-consent input { margin-top: 3px; flex-shrink: 0; }
+  .sms-consent a { color: var(--blue); }
+  .sms-fine { font-size: 12px; color: var(--faint); line-height: 1.45; }
 
   /* compact top bar exists only on narrow screens (see the media block) */
   .compact-bar { display: none; }
@@ -3245,7 +3251,9 @@ document.addEventListener("click", e => {
   if (a === "reminder-snooze") snoozeReminder(el.dataset.id, 60);
   if (a === "reminder-delete") deleteReminder(el.dataset.id);
   if (a === "push-enable") enablePush();
-  if (a === "sms-clear") saveSmsPhone("");
+  if (a === "sms-stop") smsStop();
+  if (a === "sms-resend") smsResend();
+  if (a === "sms-refresh") smsRefresh();
   if (a === "push-disable") disablePush();
   if (a === "filter") { taskFilter = el.dataset.filter; syncFilterTabs(); renderTasks(); }
   if (a === "status-filter") {
@@ -3758,7 +3766,7 @@ window.addEventListener("drop", e => { if (dragHasFiles(e)) e.preventDefault(); 
 /* ---------- init ---------- */
 
 async function init() {
-  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks(), loadReminders(), refreshPushDevices(), loadSmsPhone()]);
+  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks(), loadReminders(), refreshPushDevices(), loadSmsState()]);
   await detectPushState();
   routeInboxItems();
   // give every note a stable id so files can attach to it across sessions;
@@ -3788,7 +3796,7 @@ async function init() {
 let reminders = [];                  // rows from the reminders table (pending, delivered and done)
 let pushStatus = "unknown";           // unsupported | denied | off | on
 let pushDevices = 0;                 // how many devices this user has enabled push on (any device)
-let smsPhone = "";                   // E.164 number reminders are texted to (stored in the auth user's metadata)
+let smsState = { phone: "", status: "off" };   // off | pending | confirmed | stopped (server-controlled, see api/sms-optin.js)
 const notifiedReminderIds = new Set();  // reminders we've already toasted this session
 const REMINDER_POLL_MS = 30000;
 const REPEAT_LABEL = { daily: "Daily", weekdays: "Weekdays", weekly: "Weekly", monthly: "Monthly" };
@@ -3922,7 +3930,7 @@ async function checkDueReminders() {
   if (!due.length) return;
   const cfg = window.BRILL_SUPABASE || {};
   // the server cron delivers (and marks) reminders when it has a channel to this user
-  const pushHandles = (pushDevices > 0 && !!cfg.vapidPublicKey) || (!!smsPhone && !!cfg.sms);
+  const pushHandles = (pushDevices > 0 && !!cfg.vapidPublicKey) || (smsState.status === "confirmed" && !!cfg.sms);
   let changed = false;
   for (const r of due) {
     if (notifiedReminderIds.has(r.id)) continue;
@@ -3969,8 +3977,8 @@ async function detectPushState() {
   } catch (e) { pushStatus = "off"; }
 }
 
-async function loadSmsPhone() {
-  try { smsPhone = await BrillDB.getSmsPhone(); } catch (e) { /* keep what we have */ }
+async function loadSmsState() {
+  try { smsState = await BrillDB.smsState(); } catch (e) { /* keep what we have */ }
 }
 
 // Accept "+1 (310) 555-0123", "310-555-0123" (assumed US) etc.; return E.164 or "".
@@ -3983,35 +3991,72 @@ function normalizePhone(raw) {
   return "";
 }
 
-async function saveSmsPhone(raw) {
-  const cleared = !String(raw || "").trim();
-  const phone = cleared ? "" : normalizePhone(raw);
-  if (!cleared && !phone) { showToast("Enter the number with country code, e.g. +1 310 555 0123"); return; }
+function applySmsResult(res) {
+  const sms = (res && res.sms) || {};
+  smsState = { phone: sms.phone || "", status: sms.status || "off" };
+}
+
+async function smsStart(raw, consent) {
+  const phone = normalizePhone(raw);
+  if (!phone) { showToast("Enter the number with country code, e.g. +1 310 555 0123"); return; }
+  if (!consent) { showToast("Please tick the consent box first"); return; }
   try {
-    await BrillDB.setSmsPhone(phone);
-    smsPhone = phone;
-    showToast(phone ? `Reminders will be texted to ${phone}` : "Text-message reminders turned off");
-  } catch (e) {
-    showToast("Couldn't save the number: " + ((e && e.message) || "error"));
-  }
+    applySmsResult(await BrillDB.smsOptIn("start", phone, true));
+    showToast(`Confirmation text sent to ${phone} — reply YES to it`);
+  } catch (e) { showToast("Couldn't send the confirmation: " + ((e && e.message) || "error")); }
   renderSmsCard();
+}
+
+async function smsResend() {
+  try { applySmsResult(await BrillDB.smsOptIn("resend")); showToast("Confirmation text re-sent"); }
+  catch (e) { showToast((e && e.message) || "Couldn't resend"); }
+  renderSmsCard();
+}
+
+async function smsStop() {
+  try { applySmsResult(await BrillDB.smsOptIn("stop")); showToast("Text-message reminders turned off"); }
+  catch (e) { showToast((e && e.message) || "Couldn't turn off"); }
+  renderSmsCard();
+}
+
+async function smsRefresh() {
+  await loadSmsState();
+  renderSmsCard();
+  showToast(smsState.status === "confirmed" ? "Confirmed — text reminders are on" : "Not confirmed yet — reply YES to the text we sent");
 }
 
 function renderSmsCard() {
   const el = document.getElementById("sms-card");
   if (!el) return;
   const cfg = window.BRILL_SUPABASE || {};
-  const form = `<form id="sms-form">
-      <input type="tel" id="sms-phone" placeholder="+1 310 555 0123" value="${escHtml(smsPhone)}" autocomplete="tel">
-      <button class="new-btn primary" type="submit">Save</button>
-      ${smsPhone ? `<button class="new-btn" type="button" data-action="sms-clear">Turn off</button>` : ""}
-    </form>`;
-  const status = !cfg.sms
-    ? `<b>Text messages aren't set up on the server yet</b> (Twilio keys). Save your number now and texts start as soon as they are — see supabase/MIGRATION.md.`
-    : smsPhone
-      ? `<b>Text-message reminders are on.</b> Due reminders are texted to ${escHtml(smsPhone)}.`
-      : `<b>Get reminders by text.</b> Save your mobile number (with country code) and each due reminder is texted to it.`;
-  el.innerHTML = `<div class="push-text">${status}</div>${form}`;
+  const st = smsState.status, phone = escHtml(smsState.phone);
+  let html;
+  if (!cfg.sms) {
+    html = `<div class="push-text"><b>Text messages aren't set up on the server yet</b> (Twilio keys). Once they are, this card lets you enrol a mobile number — see supabase/MIGRATION.md.</div>`;
+  } else if (st === "pending") {
+    html = `<div class="push-text"><b>One more step:</b> we texted ${phone}. Reply <b>YES</b> to that message to confirm, and reminders will start arriving by text.</div>
+      <div class="sms-row">
+        <button class="new-btn primary" data-action="sms-refresh">I replied — check</button>
+        <button class="new-btn" data-action="sms-resend">Resend text</button>
+        <button class="new-btn" data-action="sms-stop">Use a different number</button>
+      </div>`;
+  } else if (st === "confirmed") {
+    html = `<div class="push-text"><b>Text-message reminders are on.</b> Due reminders are texted to ${phone}. Reply STOP to that number, or use the button, to turn them off.</div>
+      <div class="sms-row"><button class="new-btn" data-action="sms-stop">Turn off texts</button></div>`;
+  } else {
+    const keyword = cfg.smsNumber ? ` Or text <b>REMIND</b> to <b>${escHtml(cfg.smsNumber)}</b> from that phone.` : "";
+    html = `<div class="push-text"><b>Get reminders by text.</b> Enter your mobile number, tick the box, and we'll text you a confirmation to reply YES to.${keyword}</div>
+      <form id="sms-form">
+        <div class="sms-row">
+          <input type="tel" id="sms-phone" placeholder="+1 310 555 0123" autocomplete="tel">
+          <button class="new-btn primary" type="submit">Send confirmation text</button>
+        </div>
+        <label class="sms-consent"><input type="checkbox" id="sms-consent">
+          <span>By checking this box and tapping Send, I agree to receive recurring automated reminder text messages from <b>Brill HQ Reminders</b> at the number provided. Consent is not a condition of purchase. Message frequency varies (one text per reminder I schedule). Msg &amp; data rates may apply. Reply HELP for help or STOP to cancel at any time. See the <a href="/sms-terms.html" target="_blank" rel="noopener">SMS Terms</a> and <a href="/sms-privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span>
+        </label>
+      </form>`;
+  }
+  el.innerHTML = html;
 }
 
 async function refreshPushDevices() {
@@ -4428,7 +4473,10 @@ document.getElementById("reminder-form").addEventListener("submit", e => {
   addReminderFromForm();
 });
 document.addEventListener("submit", e => {
-  if (e.target && e.target.id === "sms-form") { e.preventDefault(); saveSmsPhone(document.getElementById("sms-phone").value); }
+  if (e.target && e.target.id === "sms-form") {
+    e.preventDefault();
+    smsStart(document.getElementById("sms-phone").value, document.getElementById("sms-consent").checked);
+  }
 });
 document.getElementById("task-sort").addEventListener("change", e => {
   taskSort = e.target.value;
@@ -4449,6 +4497,7 @@ function startPolling() {
   // reminders: pick up ones set on another device, and deliver anything that's come due
   setInterval(async () => {
     await loadReminders();
+    if (smsState.status === "pending") await loadSmsState();   // picks up the YES reply
     await checkDueReminders();
     if (view === "reminders") renderReminders();
     renderNav();

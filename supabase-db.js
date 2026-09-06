@@ -487,18 +487,18 @@
       if (error) throw error;
     },
 
-    /* ---------- SMS reminders: the phone number lives in the auth user's metadata ---------- */
+    /* ---------- SMS reminders (double opt-in; state in app_metadata, written only by the server) ---------- */
 
-    async getSmsPhone() {
-      const { data } = await client.auth.getUser();
-      const meta = data && data.user ? data.user.user_metadata || {} : {};
-      return meta.sms_phone || "";
+    // -> { phone, status: "off" | "pending" | "confirmed" | "stopped", requested_at, confirmed_at }
+    async smsState() {
+      const { data } = await client.auth.getUser();   // fresh from the server, not the cached session
+      const app = data && data.user ? data.user.app_metadata || {} : {};
+      const sms = app.sms || {};
+      return { phone: sms.phone || "", status: sms.status || "off", requestedAt: sms.requested_at || null, confirmedAt: sms.confirmed_at || null };
     },
 
-    async setSmsPhone(phone) {
-      const { error } = await client.auth.updateUser({ data: { sms_phone: String(phone || "").trim() } });
-      if (error) throw error;
-    },
+    // action: "start" (phone, consent) | "resend" | "stop"
+    smsOptIn(action, phone, consent) { return this.callApi("/api/sms-optin", { action, phone, consent: !!consent }); },
 
     /* ---------- web push subscriptions (one row per device) ---------- */
 

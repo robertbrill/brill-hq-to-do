@@ -118,6 +118,7 @@ new parts are the `reminders` and `push_subscriptions` tables (RLS, owned by
 | `VAPID_SUBJECT` | push | Optional. `mailto:you@example.com` or an https URL; defaults to the production deployment URL. |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | SMS | From the Twilio Console home page. Enables text-message reminders. |
 | `TWILIO_FROM_NUMBER` | SMS | Your Twilio phone number in E.164 form (`+13105550123`). Or set `TWILIO_MESSAGING_SERVICE_SID` instead. |
+| `SMS_CONTACT_EMAIL` | SMS | Support contact shown in the HELP reply and on the public SMS terms / privacy pages. |
 
 Redeploy after adding them (env vars are read at deploy time for the cron
 schedule and at request time for the rest).
@@ -136,13 +137,17 @@ schedule and at request time for the rest).
   notifications inside it. (`manifest.webmanifest` + the iOS meta tags in
   `index.html` make it installable.)
 - **Text messages**: with the Twilio variables set, each due reminder is also
-  texted to the number you save under **Reminders → Get reminders by text**
-  (stored in your login's user metadata, not in a table). A reminder counts as
-  delivered if either the push or the text went out. Twilio notes: a trial
-  account can only text numbers you've verified in the Twilio console (fine for
-  a single-user app); a paid US long-code number needs A2P 10DLC registration
-  or texts get filtered, so a toll-free number (with its one-time verification)
-  is the simpler choice.
+  texted to the number you enrolled under **Reminders → Get reminders by text**.
+  Enrollment is double opt-in (carrier requirement): you enter the number and
+  tick the consent box, `api/sms-optin.js` texts a confirmation, and texts start
+  only after you reply **YES**, which `api/sms-inbound.js` (Twilio's inbound
+  webhook) records. STOP / HELP replies are handled too. The enrollment state
+  lives in the auth user's `app_metadata` (service-role only), not in a table.
+  A reminder counts as delivered if either the push or the text went out.
+  Point the Twilio number's "A message comes in" webhook at
+  `https://<your app>/api/sms-inbound` (HTTP POST). The public program pages the
+  carriers ask for are `sms-opt-in.html`, `sms-terms.html` and `sms-privacy.html`;
+  the toll-free verification answers are in `docs/twilio-toll-free-verification.md`.
 - Repeating reminders (daily / weekdays / weekly / monthly) roll forward to the
   next occurrence after each delivery.
 
