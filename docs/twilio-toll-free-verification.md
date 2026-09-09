@@ -35,27 +35,21 @@ page URL itself.
 **Use case category:** `Account_notifications` — select this one only. Do not also tick
 Delivery_notifications or Events; one opt-in cannot cover multiple use cases (error 30504).
 
-**Use case description:**
-Brill HQ is Brill Media's private internal task, project and notes web application, used
-by the company's own account holder. Signed-in users schedule reminders for their own
-work (for example "call Jason at 9:30am" or "send the BSH invoice Friday").
+**Use case description:** (the field caps at 500 characters; this is 494 — as submitted)
+Brill HQ is Brill Media's private task and notes app. When a signed-in user schedules a
+reminder ("call Jason at 9:30am"), one text with that reminder is sent to their own
+enrolled number at the time they chose. To enroll, the user enters their number in the
+app and ticks an unchecked consent box, then must reply YES to a confirmation text before
+any reminder is sent. Reply STOP to cancel, HELP for help. No marketing is ever sent and
+numbers are never shared. Under 1000 messages per month.
 
-Brill HQ Reminders is the optional text-message delivery channel for those reminders.
-When a signed-in user schedules a reminder, one text containing that reminder is sent to
-their own enrolled mobile number at the time they chose. Every message is triggered by
-the recipient's own action inside their own account; nothing is sent that the recipient
-did not schedule for themselves.
-
-Consent is collected in the app: the user opens Reminders > "Get reminders by text",
-enters their mobile number and ticks a consent box that is unchecked by default, then
-must reply YES to a confirmation text before any reminder is sent. Reply STOP to cancel
-or HELP for support at any time.
-
-No marketing, promotional or third-party content is ever sent. Mobile numbers and opt-in
-consent are never shared with third parties. Volume is under 100 messages per month.
-
-**Estimated monthly volume:** under 100 messages (single account holder; one text per
+**Estimated monthly volume:** under 1000 messages (single account holder; one text per
 reminder scheduled).
+
+> The 500-character cap forces this to be terse, so keep every element a reviewer scores
+> separately: the business named, the transactional use case, consent originating on the
+> web form, the unchecked box, the YES double opt-in, STOP/HELP, no marketing, no
+> sharing, and a volume figure. Drop framing before dropping any of those.
 
 **Opt-in type:** Web form. (Not "via text" — there is no keyword opt-in. Declaring one
 is what caused the 30498 rejection.) Double opt-in: every enrollment must be confirmed by
