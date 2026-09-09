@@ -4003,7 +4003,7 @@ async function smsStart(raw, consent) {
   try {
     applySmsResult(await BrillDB.smsOptIn("start", phone, true));
     showToast(`Confirmation text sent to ${phone} — reply YES to it`);
-  } catch (e) { showToast("Couldn't send the confirmation: " + ((e && e.message) || "error")); }
+  } catch (e) { showToast((e && e.message) || "Couldn't send the confirmation"); }
   renderSmsCard();
 }
 
