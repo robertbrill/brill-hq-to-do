@@ -46,7 +46,7 @@
 
   <h2>How to opt in</h2>
   <div class="card">
-    <div class="label">Option A &mdash; in the app (web form)</div>
+    <div class="label">In the app (web form)</div>
     <p>Signed-in users open <b>Reminders &rarr; Get reminders by text</b>, enter their mobile number, tick the consent box shown below, and tap <b>Send confirmation text</b>. This is the exact form:</p>
     <div class="mock" id="form-mock">
       <div class="row">
@@ -58,13 +58,8 @@
       </label>
     </div>
   </div>
-  <div class="card">
-    <div class="label">Option B &mdash; by text (keyword)</div>
-    <p>From the mobile phone you added in the app, text the keyword <b>REMIND</b> to <b data-sms-number>the Brill HQ Reminders toll-free number</b>. The keyword is also shown on the enrollment card inside the app.</p>
-  </div>
-
   <h2>Final confirmation (double opt-in)</h2>
-  <p>Either way, enrollment is not complete until the user replies <b>YES</b> to this confirmation request sent to their phone:</p>
+  <p>Enrollment is not complete until the user replies <b>YES</b> to this confirmation request sent to their phone:</p>
   <div class="label">Confirmation request</div>
   <div class="msg">Brill HQ Reminders: Reply YES to confirm you want your scheduled reminders texted to this number. Msg frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to cancel. Terms: <span data-app-url>https://brill-hq-to-do.vercel.app</span>/sms-terms.html</div>
   <div class="label">Welcome / confirmation message (sent after YES)</div>
@@ -80,13 +75,15 @@ Reply STOP to cancel.</div>
     <tr><th>Frequency</th><td>Varies. One text per reminder the user schedules; a repeating reminder sends one text per occurrence. Typical use is a few messages per week.</td></tr>
     <tr><th>Cost</th><td>Message and data rates may apply according to the user's mobile plan. Brill Media does not charge for the service.</td></tr>
     <tr><th>Help</th><td>Reply <b>HELP</b> to any message for program information and support contact, or email <span data-sms-contact>the account contact listed in the app</span>.</td></tr>
-    <tr><th>Stop</th><td>Reply <b>STOP</b> at any time to cancel. One final message confirms the opt-out and no further texts are sent. Texts can also be turned off in the app under Reminders.</td></tr>
+    <tr><th>Stop</th><td>Reply <b>STOP</b> at any time to cancel. The number is unsubscribed immediately at the carrier level, a confirmation is returned, and no further texts are sent. Reply <b>START</b> or <b>UNSTOP</b> to re-subscribe. Texts can also be turned off in the app under Reminders.</td></tr>
     <tr><th>Terms &amp; privacy</th><td><a href="/sms-terms.html">SMS Terms &amp; Conditions</a> &middot; <a href="/sms-privacy.html">Privacy Policy</a></td></tr>
   </table>
-  <div class="label" style="margin-top:14px">HELP response</div>
-  <div class="msg">Brill HQ Reminders: We text you the reminders you schedule in your Brill HQ account. Support: <span data-sms-contact>see the app</span>. Msg frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to cancel.</div>
-  <div class="label">STOP response</div>
-  <div class="msg">Brill HQ Reminders: You've been unsubscribed and will receive no further texts. Reply START to re-subscribe.</div>
+  <p style="margin-top:14px"><b>HELP and STOP.</b> Both keywords are answered automatically by Twilio's standard toll-free handling for this number, so the exact wording is Twilio's rather than ours:</p>
+  <table>
+    <tr><th>HELP</th><td>Reply <b>HELP</b> (or <b>INFO</b>) to any message to receive the standard help response identifying the program, together with the support contact <span data-sms-contact>shown in the app</span>. Replying HELP has no effect on your subscription.</td></tr>
+    <tr><th>STOP</th><td>Reply <b>STOP</b> (or <b>CANCEL</b>, <b>END</b>, <b>QUIT</b>, <b>UNSUBSCRIBE</b>, <b>STOPALL</b>) to any message. You are unsubscribed at the carrier level straight away, a standard confirmation is returned, and no further texts can be sent to your number.</td></tr>
+    <tr><th>START</th><td>Reply <b>START</b> or <b>UNSTOP</b> to re-subscribe after a STOP. This is the only way to undo an opt-out &mdash; re-enrolling in the app alone will not restore delivery.</td></tr>
+  </table>
 
   <p><b>Standard disclaimers.</b> Carriers are not liable for delayed or undelivered messages. Consent to receive texts is not a condition of any purchase. Mobile numbers and consent records are used only to deliver this program and are never sold or shared with third parties or affiliates for marketing or promotional purposes.</p>
 

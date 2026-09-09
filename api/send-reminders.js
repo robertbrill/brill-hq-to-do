@@ -100,6 +100,21 @@ module.exports = async (req, res) => {
     return (phoneCache[userId] = phone);
   }
 
+  // Mirror a carrier-level opt-out into our own state, and drop the cached
+  // number so the rest of this run stops texting it.
+  async function markOptedOut(userId, phone) {
+    phoneCache[userId] = "";
+    try {
+      const { data } = await db.auth.admin.getUserById(userId);
+      const meta = (data && data.user && data.user.app_metadata) || {};
+      const sms = meta.sms || {};
+      if (sms.phone !== phone || sms.status === "stopped") return;   // already handled, or moved on
+      await db.auth.admin.updateUserById(userId, {
+        app_metadata: { ...meta, sms: { ...sms, status: "stopped", stopped_at: new Date().toISOString() } },
+      });
+    } catch (e) { console.error("[send-reminders] markOptedOut: " + ((e && e.message) || e)); }
+  }
+
   const now = new Date();
   const { data: due, error } = await db.from("reminders").select("*")
     .is("fired_at", null).eq("done", false).lte("due_at", now.toISOString())
@@ -116,7 +131,7 @@ module.exports = async (req, res) => {
   }
 
   const dead = new Set();
-  let sent = 0, smsSent = 0, delivered = 0, pendingNoDevice = 0;
+  let sent = 0, smsSent = 0, delivered = 0, pendingNoDevice = 0, optedOut = 0;
   const failures = [];
 
   for (const r of due) {
@@ -146,7 +161,15 @@ module.exports = async (req, res) => {
     // SMS to the saved number
     if (phone) {
       try { await smsLib.sendSms(phone, smsLib.messages().reminder(title, r.notes)); smsSent++; via.push("sms"); }
-      catch (e) { failures.push({ reminder: r.id, channel: "sms", message: String(e && e.message).slice(0, 200) }); }
+      catch (e) {
+        // A number that replied STOP is blocked at Twilio, and nothing we do
+        // here can undo that. Left alone the enrollment stays "confirmed" and
+        // every future reminder fails the same way, while the app goes on
+        // claiming texts are on. Record the opt-out so the card tells the
+        // truth and the sends stop.
+        if (e && e.twilioCode === smsLib.TWILIO_BLOCKED) { await markOptedOut(r.user_id, phone); optedOut++; }
+        failures.push({ reminder: r.id, channel: "sms", message: String(e && e.message).slice(0, 200) });
+      }
     }
 
     if (!via.length) continue;   // nothing got through: leave it pending; the app shows it when opened
@@ -161,7 +184,7 @@ module.exports = async (req, res) => {
 
   if (dead.size) await db.from("push_subscriptions").delete().in("id", [...dead]);
 
-  const summary = { checked: due.length, delivered, pushSent: sent, smsSent, pendingNoDevice, removedSubscriptions: dead.size, failures };
+  const summary = { checked: due.length, delivered, pushSent: sent, smsSent, pendingNoDevice, optedOut, removedSubscriptions: dead.size, failures };
   if (failures.length) console.warn("[send-reminders]", JSON.stringify(summary));
   res.status(200).json(summary);
 };

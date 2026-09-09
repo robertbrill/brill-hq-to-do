@@ -13,7 +13,7 @@
  */
 const { createClient } = require("@supabase/supabase-js");
 const { verifyUser, jsonBody, supabaseEnv } = require("../lib/verify-user");
-const { twilioEnv, isE164, sendSms, messages } = require("../lib/sms");
+const { twilioEnv, isE164, sendSms, messages, TWILIO_BLOCKED, blockedHelp } = require("../lib/sms");
 
 const RESEND_COOLDOWN_MS = 60 * 1000;
 
@@ -48,8 +48,20 @@ module.exports = async (req, res) => {
       const phone = String(body.phone || "").trim();
       if (!isE164(phone)) { res.status(400).json({ error: "bad_phone", message: "Enter the number with country code, e.g. +13105550123." }); return; }
       if (!body.consent) { res.status(400).json({ error: "consent_required", message: "Please tick the consent box first." }); return; }
+      const prev = appMeta.sms || null;
       const sms = await save({ phone, status: "pending", requested_at: now, consent_at: now, confirmed_at: null });
-      await sendSms(phone, messages().confirm);
+      try {
+        await sendSms(phone, messages().confirm);
+      } catch (e) {
+        // The confirmation never went out, so "pending" would be a dead end:
+        // the card would ask the user to reply YES to a text they never got.
+        await save(prev).catch(() => { /* best effort — the send failure is what matters */ });
+        if (e && e.twilioCode === TWILIO_BLOCKED) {
+          res.status(409).json({ error: "number_opted_out", message: blockedHelp() });
+          return;
+        }
+        throw e;
+      }
       res.status(200).json({ sms });
       return;
     }
@@ -59,7 +71,16 @@ module.exports = async (req, res) => {
         res.status(429).json({ error: "too_soon", message: "Give it a minute before resending." }); return;
       }
       const sms = await save({ ...current, requested_at: now });
-      await sendSms(current.phone, messages().confirm);
+      try {
+        await sendSms(current.phone, messages().confirm);
+      } catch (e) {
+        await save(current).catch(() => { /* restore the old cooldown stamp */ });
+        if (e && e.twilioCode === TWILIO_BLOCKED) {
+          res.status(409).json({ error: "number_opted_out", message: blockedHelp() });
+          return;
+        }
+        throw e;
+      }
       res.status(200).json({ sms });
       return;
     }

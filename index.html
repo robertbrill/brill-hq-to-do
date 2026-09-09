@@ -4003,7 +4003,7 @@ async function smsStart(raw, consent) {
   try {
     applySmsResult(await BrillDB.smsOptIn("start", phone, true));
     showToast(`Confirmation text sent to ${phone} — reply YES to it`);
-  } catch (e) { showToast("Couldn't send the confirmation: " + ((e && e.message) || "error")); }
+  } catch (e) { showToast((e && e.message) || "Couldn't send the confirmation"); }
   renderSmsCard();
 }
 
@@ -4044,8 +4044,7 @@ function renderSmsCard() {
     html = `<div class="push-text"><b>Text-message reminders are on.</b> Due reminders are texted to ${phone}. Reply STOP to that number, or use the button, to turn them off.</div>
       <div class="sms-row"><button class="new-btn" data-action="sms-stop">Turn off texts</button></div>`;
   } else {
-    const keyword = cfg.smsNumber ? ` Or text <b>REMIND</b> to <b>${escHtml(cfg.smsNumber)}</b> from that phone.` : "";
-    html = `<div class="push-text"><b>Get reminders by text.</b> Enter your mobile number, tick the box, and we'll text you a confirmation to reply YES to.${keyword}</div>
+    html = `<div class="push-text"><b>Get reminders by text.</b> Enter your mobile number, tick the box, and we'll text you a confirmation to reply YES to.</div>
       <form id="sms-form">
         <div class="sms-row">
           <input type="tel" id="sms-phone" placeholder="+1 310 555 0123" autocomplete="tel">

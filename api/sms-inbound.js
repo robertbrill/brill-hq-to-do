@@ -4,11 +4,16 @@
  * "A message comes in": Webhook, HTTP POST, https://<your app>/api/sms-inbound
  *
  * Handles the compliance keywords for the double opt-in flow:
- *   YES / START / REMIND / CONFIRM  -> confirms a pending number (or re-subscribes) and
+ *   YES / START / CONFIRM          -> confirms a pending number (or re-subscribes) and
  *                                      sends the welcome message
- *   STOP family                     -> marks the number stopped (Twilio also blocks
- *                                      further sends and replies on its own)
- *   HELP / INFO                     -> Twilio replies with its default help text; we
+ *   STOP family                     -> records the opt-out locally; we stay silent.
+ *                                      A US toll-free number always unsubscribes the
+ *                                      sender at the carrier level and returns its own
+ *                                      confirmation, which a custom message cannot
+ *                                      replace, and the number is blocked from that
+ *                                      moment (outbound fails with 21610). Only START
+ *                                      or UNSTOP undoes it — YES does not.
+ *   HELP / INFO                     -> Twilio replies with its standard help text; we
  *                                      stay silent so the user gets one message
  *   anything else                   -> a short pointer to the app
  * Every request is checked against Twilio's X-Twilio-Signature (fail closed).
@@ -19,7 +24,7 @@ const { validateTwilioSignature, formBody, twiml, messages, isE164 } = require("
 
 const STOP_WORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const HELP_WORDS = new Set(["HELP", "INFO"]);
-const YES_WORDS = new Set(["YES", "Y", "START", "UNSTOP", "REMIND", "CONFIRM", "SUBSCRIBE"]);
+const YES_WORDS = new Set(["YES", "Y", "START", "UNSTOP", "CONFIRM", "SUBSCRIBE"]);
 
 // Find the account whose SMS enrollment uses this number (a single-user app,
 // so a short scan of auth users is fine).
@@ -59,10 +64,10 @@ module.exports = async (req, res) => {
   try {
     if (STOP_WORDS.has(word)) {
       if (sms) await setSms({ ...sms, status: "stopped", stopped_at: now });
-      reply("");   // Twilio's built-in opt-out handling sends the STOP confirmation
+      reply("");   // the carrier's own STOP confirmation is the only one that lands
       return;
     }
-    if (HELP_WORDS.has(word)) { reply(""); return; }   // Twilio's default HELP reply
+    if (HELP_WORDS.has(word)) { reply(""); return; }   // Twilio's standard HELP reply
     if (YES_WORDS.has(word)) {
       if (!sms) { reply(msg.unknown); return; }
       if (sms.status === "confirmed") { reply(msg.already); return; }
