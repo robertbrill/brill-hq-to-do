@@ -96,13 +96,23 @@ Msg & data rates may apply. Message frequency varies. Consent is not a condition
 purchase. Carriers are not liable for delayed or undelivered messages. Mobile information
 is never shared with third parties or affiliates for marketing or promotional purposes.
 
-HELP: reply HELP to any message. Response: "Brill HQ Reminders: We text you the reminders
-you schedule in your Brill HQ account. Support: [SMS_CONTACT_EMAIL]. Msg frequency varies.
-Msg & data rates may apply. Reply HELP for help, STOP to cancel."
+HELP: reply HELP or INFO to any message. The response is Twilio's standard help reply for
+this toll-free number, identifying the program and the support contact
+(SMS_CONTACT_EMAIL). Replying HELP does not change the subscription.
 
-STOP: reply STOP to any message. Response: "Brill HQ Reminders: You've been unsubscribed
-and will receive no further texts. Reply START to re-subscribe." Texts can also be turned
-off inside the app under Reminders.
+STOP: reply STOP, CANCEL, END, QUIT, UNSUBSCRIBE or STOPALL to any message. The number is
+unsubscribed at the carrier level immediately and the carrier's standard confirmation is
+returned; no further texts can be delivered. Reply START or UNSTOP to re-subscribe. Texts
+can also be turned off inside the app under Reminders.
+
+> Do not paste custom HELP/STOP wording into the verification form. This number uses
+> Twilio's default opt-out handling, so Twilio populates those fields itself. A US
+> toll-free number always unsubscribes on STOP and returns the carrier's own confirmation
+> — a custom message cannot replace it — and after an opt-out the number is on Twilio's
+> block list, so any reply we sent would fail with error 21610. Quoting wording the number
+> does not actually send is the same description-vs-behaviour gap that caused the 30498
+> rejection. Custom HELP text would require a Messaging Service with Advanced Opt-Out
+> enabled, which only Twilio support can later disable.
 
 Terms: https://brill-hq-to-do.vercel.app/sms-terms.html
 Privacy: https://brill-hq-to-do.vercel.app/sms-privacy.html
