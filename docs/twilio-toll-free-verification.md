@@ -10,6 +10,17 @@ public pages render the real number and contact.
 > path — a cold REMIND was answered with "sign in and add this number". The keyword has
 > been removed from the app, this page's collateral and the webhook, so the web form is
 > now the single opt-in. **Declare one opt-in type: Web form.**
+>
+> **Second rejection: 30513**, "Opt-in — consent for messaging is a requirement for
+> service" (request SID HH733be67f207a6157c5c493c0fb315602). The submission never said
+> the app is usable without texts. The description described enrolling but not declining;
+> the consent box said only "Consent is not a condition of purchase", which answers a
+> question nobody asked here since nothing is sold; and the one use of the word
+> "optional" was buried in the program page's intro. Reviewers read that as consent being
+> bundled into the service. Fixed by stating optionality where the decision is made: the
+> consent box, a callout above "How to opt in", a paragraph opening the Terms, and the
+> description below. **The reviewer must be able to see that a user can decline texts and
+> still use Brill HQ in full.** Keep that claim true and prominent in any future edit.
 
 Public pages (host these URLs; they are served by the deployed app, no login):
 
@@ -35,13 +46,13 @@ page URL itself.
 **Use case category:** `Account_notifications` — select this one only. Do not also tick
 Delivery_notifications or Events; one opt-in cannot cover multiple use cases (error 30504).
 
-**Use case description:** (the field caps at 500 characters; this is 494 — as submitted)
-Brill HQ is Brill Media's private task and notes app. When a signed-in user schedules a
-reminder ("call Jason at 9:30am"), one text with that reminder is sent to their own
-enrolled number at the time they chose. To enroll, the user enters their number in the
-app and ticks an unchecked consent box, then must reply YES to a confirmation text before
-any reminder is sent. Reply STOP to cancel, HELP for help. No marketing is ever sent and
-numbers are never shared. Under 1000 messages per month.
+**Use case description:** (the field caps at 500 characters; this is 496)
+Brill HQ is Brill Media's private task and notes app. Text reminders are optional: the
+app works fully without them and delivers reminders by browser notification instead. A
+user who wants texts enters their number and ticks a consent box that is unchecked by
+default, then must reply YES to a confirmation text. Each text contains only a reminder
+they scheduled ("call Jason at 9:30am"). Reply STOP to cancel, HELP for help. No
+marketing. Numbers are never shared. Under 1000 messages per month.
 
 **Estimated monthly volume:** under 1000 messages (single account holder; one text per
 reminder scheduled).
