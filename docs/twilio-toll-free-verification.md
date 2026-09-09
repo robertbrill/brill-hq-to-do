@@ -1,9 +1,15 @@
 # Twilio toll-free verification — answers for the form
 
-Fill the Twilio **Toll-Free Verification** request with the text below. Replace
-`[TOLL-FREE NUMBER]` with your Twilio number (e.g. +1 833 555 0123) and make sure
-`TWILIO_FROM_NUMBER` and `SMS_CONTACT_EMAIL` are set in Vercel first, so the public
-pages show the real number and contact.
+Fill the Twilio **Toll-Free Verification** request with the text below. The number is
++1 855 243 5973; `TWILIO_FROM_NUMBER` and `SMS_CONTACT_EMAIL` are set in Vercel, so the
+public pages render the real number and contact.
+
+> **Resubmission note.** The first submission was rejected with error **30498** ("opt-in
+> workflow must match submission details"). Cause: it declared a keyword opt-in (text
+> REMIND) alongside the web form, but the backend never implemented REMIND as a consent
+> path — a cold REMIND was answered with "sign in and add this number". The keyword has
+> been removed from the app, this page's collateral and the webhook, so the web form is
+> now the single opt-in. **Declare one opt-in type: Web form.**
 
 Public pages (host these URLs; they are served by the deployed app, no login):
 
@@ -14,7 +20,7 @@ Public pages (host these URLs; they are served by the deployed app, no login):
 | Privacy Policy | https://brill-hq-to-do.vercel.app/sms-privacy.html |
 
 Take a screenshot of `sms-opt-in.html` (it shows the exact consent form, the
-keyword instructions, the confirmation/welcome/HELP/STOP messages, frequency and
+the confirmation/welcome/HELP/STOP messages, frequency and
 disclaimers) and upload it to Google Drive / OneDrive with "anyone with the link
 can view", then paste that link into **Opt-In Image URLs**. You can also paste the
 page URL itself.
@@ -26,30 +32,43 @@ page URL itself.
 **Business name:** Brill Media
 **Website:** https://brill-hq-to-do.vercel.app (app) — company site brillmedia.co
 
-**Use case category:** Account notifications / reminders (transactional; not marketing)
+**Use case category:** `Account_notifications` — select this one only. Do not also tick
+Delivery_notifications or Events; one opt-in cannot cover multiple use cases (error 30504).
 
 **Use case description:**
-Brill HQ is Brill Media's internal task, project and notes application, used by the
-account holder. "Brill HQ Reminders" sends the account holder a text message for each
-reminder they themselves schedule in the app (for example "remind me Friday at 9am to
-send the invoice"). Messages go only to the mobile number the account holder enrolled
-and confirmed by replying YES. No marketing or promotional content is ever sent, and
-the recipient is the person who created the reminder.
+Brill HQ is Brill Media's private internal task, project and notes web application, used
+by the company's own account holder. Signed-in users schedule reminders for their own
+work (for example "call Jason at 9:30am" or "send the BSH invoice Friday").
+
+Brill HQ Reminders is the optional text-message delivery channel for those reminders.
+When a signed-in user schedules a reminder, one text containing that reminder is sent to
+their own enrolled mobile number at the time they chose. Every message is triggered by
+the recipient's own action inside their own account; nothing is sent that the recipient
+did not schedule for themselves.
+
+Consent is collected in the app: the user opens Reminders > "Get reminders by text",
+enters their mobile number and ticks a consent box that is unchecked by default, then
+must reply YES to a confirmation text before any reminder is sent. Reply STOP to cancel
+or HELP for support at any time.
+
+No marketing, promotional or third-party content is ever sent. Mobile numbers and opt-in
+consent are never shared with third parties. Volume is under 100 messages per month.
 
 **Estimated monthly volume:** under 100 messages (single account holder; one text per
 reminder scheduled).
 
-**Opt-in type:** Web form (in-app) and Keyword (text REMIND). Double opt-in: every
-enrollment must be confirmed by replying YES.
+**Opt-in type:** Web form. (Not "via text" — there is no keyword opt-in. Declaring one
+is what caused the 30498 rejection.) Double opt-in: every enrollment must be confirmed by
+replying YES to the confirmation text.
 
 ---
 
 ## Opt-In Policy Proof (paste this)
 
-Users opt in to Brill HQ Reminders in one of two ways, and in both cases must confirm
-by replying YES before any reminder texts are sent.
+Brill HQ Reminders has a single opt-in path — a web form inside the app — and every
+enrollment must be confirmed by replying YES before any reminder texts are sent.
 
-1) Via web form (inside the app). A signed-in user opens Reminders → "Get reminders by
+Via web form (inside the app). A signed-in user opens Reminders → "Get reminders by
 text", enters their mobile number, ticks a consent checkbox and taps "Send confirmation
 text". The consent language shown next to the checkbox is:
 "By checking this box and tapping Send, I agree to receive recurring automated reminder
@@ -58,11 +77,6 @@ of purchase. Message frequency varies (one text per reminder I schedule). Msg & 
 may apply. Reply HELP for help or STOP to cancel at any time. See the SMS Terms
 (https://brill-hq-to-do.vercel.app/sms-terms.html) and Privacy Policy
 (https://brill-hq-to-do.vercel.app/sms-privacy.html)."
-
-2) Via text (keyword campaign). From the phone they added in the app, the user texts the
-keyword REMIND to [TOLL-FREE NUMBER]. The keyword and number are shown on the enrollment
-card in the app and on the public program page
-https://brill-hq-to-do.vercel.app/sms-opt-in.html.
 
 Confirmation request (sent immediately after either opt-in; the user must reply YES):
 "Brill HQ Reminders: Reply YES to confirm you want your scheduled reminders texted to this
@@ -121,7 +135,7 @@ cancel. Terms: https://brill-hq-to-do.vercel.app/sms-terms.html"
 
 1. Twilio Console → Phone Numbers → your number → **Messaging** → "A message comes in":
    Webhook, `HTTP POST`, `https://brill-hq-to-do.vercel.app/api/sms-inbound`. Save.
-   (This is what receives YES / REMIND / STOP replies.)
+   (This is what receives YES / STOP / HELP replies.)
 2. Vercel env vars: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
    (E.164, e.g. `+18335550123`), `SMS_CONTACT_EMAIL` (support email shown in HELP and on
    the public pages).

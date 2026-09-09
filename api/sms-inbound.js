@@ -4,7 +4,7 @@
  * "A message comes in": Webhook, HTTP POST, https://<your app>/api/sms-inbound
  *
  * Handles the compliance keywords for the double opt-in flow:
- *   YES / START / REMIND / CONFIRM  -> confirms a pending number (or re-subscribes) and
+ *   YES / START / CONFIRM          -> confirms a pending number (or re-subscribes) and
  *                                      sends the welcome message
  *   STOP family                     -> marks the number stopped (Twilio also blocks
  *                                      further sends and replies on its own)
@@ -19,7 +19,7 @@ const { validateTwilioSignature, formBody, twiml, messages, isE164 } = require("
 
 const STOP_WORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const HELP_WORDS = new Set(["HELP", "INFO"]);
-const YES_WORDS = new Set(["YES", "Y", "START", "UNSTOP", "REMIND", "CONFIRM", "SUBSCRIBE"]);
+const YES_WORDS = new Set(["YES", "Y", "START", "UNSTOP", "CONFIRM", "SUBSCRIBE"]);
 
 // Find the account whose SMS enrollment uses this number (a single-user app,
 // so a short scan of auth users is fine).
