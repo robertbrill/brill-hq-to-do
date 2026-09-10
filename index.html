@@ -4660,12 +4660,27 @@ async function boot() {
   else { document.getElementById("auth-overlay").classList.add("show"); document.getElementById("auth-email").focus(); }
   // if the session ends (sign-out elsewhere, expiry), drop back to the login screen
   installNoteDebug();
-  BrillDB.onAuth((s, event) => {
+  BrillDB.onAuth(async (s, event) => {
     if (NOTE_DEBUG) noteDebugRecord("auth state changed", { event: event || "?", hasSession: !!s });
-    if (!s && appStarted) {
-      noteDebugRecord("session lost \u2014 reloading the page", { event: event || "?" });
-      location.reload();
+    if (s || !appStarted) return;
+    // A null session is not proof of a sign-out. Supabase also reports one for
+    // a token refresh that failed or raced, and reloading on that throws away
+    // whatever was being typed — a note in progress goes back to "Select an
+    // entry" mid-sentence. Only a real SIGNED_OUT is taken at face value;
+    // anything else is re-checked before the page is thrown away.
+    if (event !== "SIGNED_OUT") {
+      let still = null;
+      try { still = await BrillDB.getSession(); } catch (e) { still = null; }
+      if (still) {
+        if (NOTE_DEBUG) noteDebugRecord("null session was transient \u2014 ignored", { event: event || "?" });
+        return;
+      }
     }
+    // The session really is gone and the page is about to go with it: get any
+    // pending edit to the server first, on the chance it still authenticates.
+    flushSave();
+    noteDebugRecord("session lost \u2014 reloading the page", { event: event || "?" });
+    location.reload();
   });
 }
 
