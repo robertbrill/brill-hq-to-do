@@ -2027,7 +2027,36 @@ function deleteBarHtml() {
   </div>`;
 }
 
-function renderTasks() {
+// Re-rendering a list replaces the notes field being typed in, and the caret
+// goes with it. That is what closes the notes box under a task: the inbox poll
+// calls render() unconditionally every 10s while the Tasks view is open, so a
+// note being written was interrupted on a 10-second clock.
+//
+// The text itself is never at risk — the input handler writes each keystroke
+// into state before the rebuild reads it back — so all that is needed is to
+// put the caret back where it was. Keyed by role plus the id the markup
+// already carries, so it survives the element being recreated.
+function keepCaretThrough(rerender) {
+  const el = document.activeElement;
+  const role = el && el.dataset && el.dataset.role;
+  const keep = (role === "task-notes" || role === "ptodo-notes")
+    ? { role, key: el.dataset.key || "", id: el.dataset.id || "",
+        start: el.selectionStart, end: el.selectionEnd, scroll: el.scrollTop }
+    : null;
+  rerender();
+  if (!keep) return;
+  const attr = keep.key ? '[data-key="' + CSS.escape(keep.key) + '"]'
+                        : '[data-id="' + CSS.escape(keep.id) + '"]';
+  const again = document.querySelector('[data-role="' + keep.role + '"]' + attr);
+  if (!again || again === document.activeElement) return;
+  again.focus({ preventScroll: true });
+  try { again.setSelectionRange(keep.start, keep.end); } catch (e) { /* not a text field */ }
+  again.scrollTop = keep.scroll;
+}
+
+function renderTasks() { keepCaretThrough(renderTasksInner); }
+
+function renderTasksInner() {
   const container = document.getElementById("sections-container");
   const q = searchQuery.trim().toLowerCase();
   let html = "";
@@ -2238,7 +2267,9 @@ function renderProjectsOverview() {
   if (si) si.value = projectSearchQuery;
 }
 
-function renderProjectsMain() {
+function renderProjectsMain() { keepCaretThrough(renderProjectsMainInner); }
+
+function renderProjectsMainInner() {
   document.getElementById("page-project-detail").classList.toggle("page-wide", projectsOverview);
   if (projectsOverview) renderProjectsOverview();
   else renderProjectDetail();
