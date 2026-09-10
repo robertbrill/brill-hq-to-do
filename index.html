@@ -4577,6 +4577,44 @@ function wireAuth() {
   });
 }
 
+/* Diagnostics for "the note box closes while I'm typing". Dormant unless the
+   URL carries ?debug=notes, so it costs nothing in normal use. Records every
+   structural rebuild of the note pane and every time the editor loses focus,
+   each with the stack that caused it, and keeps the last 50 in
+   window.__noteDebug for copy/paste. */
+function installNoteDebug() {
+  if (!/[?&]debug=notes(\b|$)/.test(location.search)) return;
+  const log = window.__noteDebug = [];
+  const record = (what, extra) => {
+    const entry = Object.assign({ at: new Date().toLocaleTimeString(), what }, extra, {
+      stack: (new Error().stack || "").split("\n").slice(2, 9).join(" | "),
+    });
+    log.push(entry);
+    if (log.length > 50) log.shift();
+    console.log("[note-debug]", what, entry);
+  };
+  const detail = document.getElementById("entry-detail");
+  if (detail) {
+    new MutationObserver(muts => {
+      for (const m of muts) {
+        if (m.type !== "childList" || (!m.addedNodes.length && !m.removedNodes.length)) continue;
+        const item = personalItems[selectedEntryIndex] || {};
+        record("note pane rebuilt", { selectedEntryIndex, noteId: item.id || null, noteTitle: item.title || null });
+        showToast("note-debug: pane rebuilt \u2014 see console");
+        break;
+      }
+    }).observe(detail, { childList: true });
+  }
+  document.addEventListener("focusout", e => {
+    const el = e.target;
+    if (!el || !el.dataset || el.dataset.role !== "entry-body") return;
+    const to = e.relatedTarget;
+    record("editor lost focus", { movedTo: (to && (to.dataset && to.dataset.role || to.id || to.tagName)) || "nothing" });
+    showToast("note-debug: editor lost focus \u2014 see console");
+  }, true);
+  console.log("[note-debug] watching the note pane. Reproduce the problem, then run:\n  copy(JSON.stringify(window.__noteDebug, null, 2))");
+}
+
 async function boot() {
   await BrillDB.ready;
   if (BrillDB.missingConfig() || !BrillDB.isReady()) {
@@ -4589,6 +4627,7 @@ async function boot() {
   else { document.getElementById("auth-overlay").classList.add("show"); document.getElementById("auth-email").focus(); }
   // if the session ends (sign-out elsewhere, expiry), drop back to the login screen
   BrillDB.onAuth((s) => { if (!s && appStarted) location.reload(); });
+  installNoteDebug();
 }
 
 boot();
