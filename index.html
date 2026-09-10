@@ -4577,13 +4577,18 @@ function wireAuth() {
   });
 }
 
+// Read at load: startApp() calls history.replaceState(location.pathname) when
+// the URL carries ?view=, which drops every other param with it. Checking the
+// flag later would miss ?view=personal&debug=notes entirely.
+const NOTE_DEBUG = /[?&]debug=notes(\b|$)/.test(location.search);
+
 /* Diagnostics for "the note box closes while I'm typing". Dormant unless the
    URL carries ?debug=notes, so it costs nothing in normal use. Records every
    structural rebuild of the note pane and every time the editor loses focus,
    each with the stack that caused it, and keeps the last 50 in
    window.__noteDebug for copy/paste. */
 function installNoteDebug() {
-  if (!/[?&]debug=notes(\b|$)/.test(location.search)) return;
+  if (!NOTE_DEBUG) return;
   const log = window.__noteDebug = [];
   const record = (what, extra) => {
     const entry = Object.assign({ at: new Date().toLocaleTimeString(), what }, extra, {
