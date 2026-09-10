@@ -4580,24 +4580,51 @@ function wireAuth() {
 // Read at load: startApp() calls history.replaceState(location.pathname) when
 // the URL carries ?view=, which drops every other param with it. Checking the
 // flag later would miss ?view=personal&debug=notes entirely.
-const NOTE_DEBUG = /[?&]debug=notes(\b|$)/.test(location.search);
+//
+// It also has to outlive a reload. The URL no longer carries the flag by then
+// (replaceState took it), and a reload is the prime suspect for the note
+// closing — so the flag is remembered until ?debug=off turns it back off.
+const NOTE_DEBUG_ON_KEY = "brillhq.noteDebugOn";
+const NOTE_DEBUG = (() => {
+  const onUrl = /[?&]debug=notes(\b|$)/.test(location.search);
+  const offUrl = /[?&]debug=off(\b|$)/.test(location.search);
+  try {
+    if (offUrl) { localStorage.removeItem(NOTE_DEBUG_ON_KEY); return false; }
+    if (onUrl) localStorage.setItem(NOTE_DEBUG_ON_KEY, "1");
+    return onUrl || localStorage.getItem(NOTE_DEBUG_ON_KEY) === "1";
+  } catch (e) { return onUrl; }
+})();
 
 /* Diagnostics for "the note box closes while I'm typing". Dormant unless the
    URL carries ?debug=notes, so it costs nothing in normal use. Records every
    structural rebuild of the note pane and every time the editor loses focus,
    each with the stack that caused it, and keeps the last 50 in
    window.__noteDebug for copy/paste. */
+const NOTE_DEBUG_KEY = "brillhq.noteDebug";
+
+// Kept outside installNoteDebug so the auth handler can record the reload that
+// would otherwise wipe the evidence. No-op unless diagnostics are on.
+let noteDebugRecord = () => {};
+
 function installNoteDebug() {
   if (!NOTE_DEBUG) return;
-  const log = window.__noteDebug = [];
-  const record = (what, extra) => {
+  // Survive a reload: a page load is exactly the event most likely to be
+  // destroying the note, and an in-memory array would go with it.
+  let log = [];
+  try { log = JSON.parse(localStorage.getItem(NOTE_DEBUG_KEY) || "[]"); } catch (e) { log = []; }
+  window.__noteDebug = log;
+  const record = noteDebugRecord = (what, extra) => {
     const entry = Object.assign({ at: new Date().toLocaleTimeString(), what }, extra, {
       stack: (new Error().stack || "").split("\n").slice(2, 9).join(" | "),
     });
     log.push(entry);
-    if (log.length > 50) log.shift();
+    while (log.length > 80) log.shift();
+    try { localStorage.setItem(NOTE_DEBUG_KEY, JSON.stringify(log)); } catch (e) { /* full or blocked */ }
     console.log("[note-debug]", what, entry);
   };
+  // A fresh entry here on every load means the page reloaded — which on its own
+  // explains the note closing, and points at whatever triggered the reload.
+  record("page loaded", { url: location.href });
   const detail = document.getElementById("entry-detail");
   if (detail) {
     new MutationObserver(muts => {
@@ -4617,7 +4644,8 @@ function installNoteDebug() {
     record("editor lost focus", { movedTo: (to && (to.dataset && to.dataset.role || to.id || to.tagName)) || "nothing" });
     showToast("note-debug: editor lost focus \u2014 see console");
   }, true);
-  console.log("[note-debug] watching the note pane. Reproduce the problem, then run:\n  copy(JSON.stringify(window.__noteDebug, null, 2))");
+  window.__noteDebugClear = () => { try { localStorage.removeItem(NOTE_DEBUG_KEY); } catch (e) {} log.length = 0; console.log("[note-debug] cleared"); };
+  console.log("[note-debug] watching the note pane (" + log.length + " event(s) carried over). Reproduce the problem, then run:\n  copy(JSON.stringify(window.__noteDebug, null, 2))\nStart clean with: __noteDebugClear()  |  turn off with ?debug=off");
 }
 
 async function boot() {
@@ -4631,8 +4659,14 @@ async function boot() {
   if (session) await startApp();
   else { document.getElementById("auth-overlay").classList.add("show"); document.getElementById("auth-email").focus(); }
   // if the session ends (sign-out elsewhere, expiry), drop back to the login screen
-  BrillDB.onAuth((s) => { if (!s && appStarted) location.reload(); });
   installNoteDebug();
+  BrillDB.onAuth((s, event) => {
+    if (NOTE_DEBUG) noteDebugRecord("auth state changed", { event: event || "?", hasSession: !!s });
+    if (!s && appStarted) {
+      noteDebugRecord("session lost \u2014 reloading the page", { event: event || "?" });
+      location.reload();
+    }
+  });
 }
 
 boot();

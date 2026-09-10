@@ -122,7 +122,9 @@
     },
 
     onAuth(cb) {
-      if (client) client.auth.onAuthStateChange((_event, session) => cb(session));
+      // the event name distinguishes a real sign-out from a token-refresh
+      // hiccup, which matters to anything that reacts to a null session
+      if (client) client.auth.onAuthStateChange((event, session) => cb(session, event));
     },
 
     // Base task list (formerly the public todo-data.js). Now served only to a
