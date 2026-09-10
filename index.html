@@ -1799,8 +1799,17 @@ async function maybeSyncState() {
     deleted = data.deleted;
     archived = data.archived || {};
     projects = data.projectItems.map(normalizeProject);
+    const openNoteId = (personalItems[selectedEntryIndex] || {}).id;
     personalItems = data.personalItems.filter(i => i && typeof i === "object");
     personalItems.forEach(n => { if (n && !n.id) n.id = legacyNoteId(n); });
+    // The list just came from the server, so the open note may sit at a
+    // different index now. renderEntryDetail() keeps the pane's DOM when it is
+    // being typed into, so leaving the index stale would point those keystrokes
+    // at whatever note happens to occupy the old slot. Follow the note by id.
+    if (openNoteId) {
+      const moved = personalItems.findIndex(n => n.id === openNoteId);
+      if (moved !== -1) selectedEntryIndex = moved;
+    }
     lastServerPayload = incoming;
     render();
   } catch (e) { /* offline; try next tick */ }
@@ -2422,13 +2431,38 @@ function renderEntriesList() {
     </div>`).join("");
 }
 
+// The note key this pane is currently showing, so a re-render can tell
+// "same note, refresh it" from "different note, swap it in".
+function entryDetailKey(item, idx) { return String((item && item.id) || ("idx:" + idx)); }
+
+// True when the caret is in this pane's title, group or body — i.e. a rebuild
+// would interrupt someone mid-word. Buttons don't count: archiving or deleting
+// from the toolbar still needs the pane redrawn.
+function isTypingInEntryDetail(detail) {
+  const ae = document.activeElement;
+  if (!ae || !detail.contains(ae)) return false;
+  return ae.isContentEditable || ae.tagName === "INPUT" || ae.tagName === "TEXTAREA";
+}
+
 function renderEntryDetail() {
   const detail = document.getElementById("entry-detail");
   const item = personalItems[selectedEntryIndex];
   if (!item) {
+    detail.dataset.noteKey = "";
     detail.innerHTML = `<div class="empty-note">Select an entry, or create one with <b>+ New</b>.</div>`;
     return;
   }
+  // Assigning innerHTML below throws away the contenteditable and every input
+  // in this pane, taking the caret and the keyboard with them — which reads as
+  // being kicked out of the note mid-sentence. Anything that re-renders while
+  // the user is typing does that: the 10s inbox poll calls render() whenever it
+  // files something, maybeSyncState() adopts another device's copy, and the
+  // sidebar re-groups on blur. None of them have anything new to show for the
+  // note being typed into — the input handler already writes each keystroke
+  // straight into `item` — so leave the live DOM alone and let it keep focus.
+  const key = entryDetailKey(item, selectedEntryIndex);
+  if (detail.dataset.noteKey === key && isTypingInEntryDetail(detail)) return;
+  detail.dataset.noteKey = key;
   detail.innerHTML = `
     <input class="entry-title-input" data-role="entry-title" placeholder="Untitled" value="${escHtml(item.title || "")}">
     <div class="entry-detail-date">${escHtml(formatEntryDate(item.createdAt))}${item.updatedAt ? " &middot; edited " + escHtml(formatEntryDate(item.updatedAt)) : ""}</div>
