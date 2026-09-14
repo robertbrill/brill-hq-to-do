@@ -1,35 +1,37 @@
 # Brill HQ — Todo App
 
-Single-file todo / project / notes dashboard for Brill Media. No build step.
-Cloud edition (`index.html` + `supabase-db.js`, Vercel functions in `api/`) is the
-live app; `todo-v2.html` + `todo-server.py` are the legacy Mac/Tailscale edition.
-See `README.md` for the file map and `supabase/MIGRATION.md` for setup.
+Single-file todo / project / notes dashboard for Brill Media ("HQ Tasks"). No build
+step. The cloud edition (`index.html` + `supabase-db.js`, Vercel functions in `api/`)
+is the live app; `todo-v2.html` + `todo-server.py` are the legacy Mac/Tailscale
+edition. See `README.md` for the file map and `supabase/MIGRATION.md` for setup.
 
 ## Design system
 
-All UI work follows the Brill Media **"Hero" look**. It is documented and coded
-in `design/`:
+The app's look is documented in `design/`:
 
-- `design/DESIGN.md` — the spec (tokens, type scale, every pattern, page
-  templates, do/don't rules).
-- `design/brill-hero.css` — tokens (`--bh-*`) and component classes, scoped
-  under `.bh`.
-- `design/brill-hero.js` — behaviors (tabs, collapsible sections, scroll-reveal
-  findings, copy, progress, mix bars, toasts, number formatting).
-- `design/fonts.css` + `design/fonts/` — self-hosted Poppins.
-- `design/preview.html` — every pattern rendered; open it to eyeball changes.
+- `design/DESIGN.md` — the spec: tokens, type scale, every row/card/control pattern,
+  page templates, do/don't rules, behaviour notes.
+- `design/brill-hq-design-reference.html` — a self-contained page that renders every
+  pattern with the app's own CSS. Open it to see what "right" looks like.
 
-Use the `brill-hero-design` skill (`.claude/skills/brill-hero-design/SKILL.md`)
-when adding or restyling any screen. The short rules: blue is the action color,
-orange is brand only, one filled blue button in view, eyebrows above every
-section, navy hero at the top of every page, hairlines not boxes, Poppins only.
+The CSS source of truth is the `<style>` block in `index.html`; the class names in
+the docs are the app's real class names.
+
+Use the `brill-hq-design` skill (`.claude/skills/brill-hq-design/SKILL.md`) when
+adding or restyling any view. The short rules: white with three text grays, one blue
+that means "action / on", red only for destructive or urgent, system font, rows that
+touch with a hover fill, everything edited in place, one filled blue button per
+surface.
 
 ## Conventions
 
-- Vanilla HTML/CSS/JS. No frameworks, no bundler. Keep new UI in the same file
-  it belongs to unless it is shared (then `design/` or `lib/`).
-- Data access goes through `BrillDB` in `supabase-db.js`; Row-Level Security is
-  the privacy model, so never bypass the user's session.
+- Vanilla HTML/CSS/JS. No frameworks, no bundler. UI lives in `index.html`; shared
+  code goes in `lib/` (server) or `supabase-db.js` (client data).
+- Rendering is string templates from `render*()` functions; interactions are
+  `data-action` attributes handled by one delegated click listener. Escape user text
+  with `escHtml()`.
+- Data access goes through `BrillDB` in `supabase-db.js`; Row-Level Security is the
+  privacy model, so never bypass the user's session.
 - Serverless functions in `api/` verify the caller with `lib/verify-user.js`.
 - `todo-data.js` and `todo-v2.html` are excluded from deploy via `.vercelignore`;
   don't add personal data to files that ship.

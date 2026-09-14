@@ -1,24 +1,20 @@
-# Brill Media · "Hero" design system (V10.5)
+# Brill HQ · Design system
 
-The layout language behind the Client Diagnostic, Media Planner and report views.
-This document is the human-readable source of truth; the code lives next to it:
+The look and behaviour of **HQ Tasks**, the Brill HQ workspace app (`index.html`):
+tasks, projects, long notes, files, reminders and the assistant. Everything here is
+lifted from the running app. The visual companion is
+`design/brill-hq-design-reference.html`, which renders every pattern below using the
+app's own CSS; open it in a browser when you want to see rather than read.
 
 | File | What it is |
 |------|------------|
-| `design/brill-hero.css` | Tokens (`--bh-*`) + every component class, scoped under `.bh`. |
-| `design/brill-hero.js` | Behaviors: tabs, collapsible sections, scroll-reveal findings, copy, progress, mix bars, toasts, number formatting. |
-| `design/fonts.css` + `design/fonts/` | Self-hosted Poppins 400/500/600/700 (Latin subset). |
-| `design/preview.html` | Every pattern rendered once. Open it to check your work. |
-| `.claude/skills/brill-hero-design/SKILL.md` | The same rules, written for Claude Code. |
+| `design/brill-hq-design-reference.html` | Self-contained reference page: swatches, type scale, every component rendered, page wireframes, rules. |
+| `design/DESIGN.md` | This document. |
+| `.claude/skills/brill-hq-design/SKILL.md` | The same rules, written for Claude Code. |
+| `index.html` `<style>` block | The source of truth for the CSS. Classes named below are the app's real class names. |
 
-Wire it up:
-
-```html
-<link rel="stylesheet" href="/design/fonts.css">
-<link rel="stylesheet" href="/design/brill-hero.css">
-<script src="/design/brill-hero.js" defer></script>
-<body class="bh"> … </body>
-```
+The character in one line: a quiet, Notion-style workspace. White, three grays of
+text, one blue, the platform font, rows that touch, everything edited in place.
 
 ---
 
@@ -26,154 +22,219 @@ Wire it up:
 
 ### Color
 
-| Token | Hex | Job |
-|-------|-----|-----|
-| `--bh-navy-deep` | `#12182E` | Hero gradient base, darkest surface |
-| `--bh-navy` | `#1B2447` | Headings, dark bands, table headers |
-| `--bh-navy-soft` | `#2B345A` | Secondary dark fills |
-| `--bh-blue` | `#3A8ECD` | **The action color**: buttons, links, active states, numerals, the heading period |
-| `--bh-blue-deep` | `#2E75AC` | Button hover |
-| `--bh-blue-numeral` | `#A9CDE9` | Big decorative numerals, eyebrows on navy |
-| `--bh-blue-soft` | `#D9E9F5` | Tinted chips, soft borders |
-| `--bh-blue-tint` | `#EFF6FC` | Highlight panel background |
-| `--bh-orange` | `#E89147` | **The brand color**: logo, active tab underline, mix bars |
-| `--bh-orange-deep` | `#D97E33` | Prose links inside the author box, hovers |
-| `--bh-green` | `#2E9E63` | Checkmarks and success. Nowhere else. |
-| `--bh-wine` | `#98424F` | Gaps / negative flags. Sparingly. |
-| `--bh-ink` | `#14192B` | Primary text on white |
-| `--bh-ink-2` | `#4A5070` | Body copy |
-| `--bh-ink-3` | `#8A90A8` | Eyebrows on white, meta, captions |
-| `--bh-page` | `#EEF1F6` | App canvas behind white cards |
-| `--bh-border` | `#E3E7EE` | Card and table borders |
-| `--bh-hairline` | `#EDF0F4` | Row dividers |
+| Token | Value | Job |
+|-------|-------|-----|
+| `--bg` | `#ffffff` | The page. Everything sits on white. |
+| `--sidebar` | `#f7f7f5` | Left nav, select chips, notes fields, info cards, login backdrop |
+| (second column) | `#fbfbfa` | Entries / projects list column |
+| `--text` | `#37352f` | Titles, body, current nav, active tab underline |
+| `--muted` | `#787774` | Nav items, subtitles, section titles, notes |
+| `--faint` | `#9b9a97` | Counts, meta, placeholders, done tasks, icon buttons |
+| `--blue` | `#2383e2` | **The accent**: Add buttons, checked boxes, focus rings, links, progress fills |
+| (blue hover) | `#1a73cd` | Primary button hover |
+| `--blue-soft` | `rgba(35,131,226,.10)` | 3px focus ring, drop-zone fill |
+| `--border` | `rgba(0,0,0,.08)` | Dividers, card borders |
+| `--border-strong` | `rgba(0,0,0,.14)` | Anything you type into or press |
+| `--hover` / `--active` | `rgba(0,0,0,.04)` / `.06` | Row hover / current nav item, selected entry |
+| (danger) | `#eb5757` | Delete actions, urgent priority, high urgency dot, select-to-delete boxes |
+| (danger text) | `#c4554d` | Danger hover text, overdue reminder time |
+| (high) | `#f2994a` | High priority |
+| (amber) | `#e9b44c` | Medium urgency dot |
+| (star) | `#f5b301` | Pinned entries |
+| (toast) | `#2f2f2c` | The one dark surface |
 
-Ratio guide: ~70% white/page neutrals · ~20% navy · ~8% blue · ~2% orange.
-Orange is *brand*, blue is *action*. Never swap their jobs.
+Ratio guide: ~90% white and warm-gray neutrals · ~8% ink text · ~2% blue. Blue means
+"action or on". Red means "destructive or urgent". Yellow means "medium / paused /
+waiting". Green means "active". Nothing else is coloured; hierarchy comes from the
+three text grays.
 
-### Typography — Poppins everywhere
+**Pill pairs** (background / text):
 
-| Role | Size / weight / tracking |
-|------|--------------------------|
-| Hero title | 38–46px / 700 / −0.03em, line-height 1.05 |
-| Launchpad title | 64–90px / **600** (not 700 at this scale) |
-| Section title | 22–26px / 700 / −0.02em |
-| Card heading | 16–18px / 600 |
-| Body | 13–14px / 400 / line-height 1.6–1.75, `ink-2` |
-| Author-box body | 16.5px / 1.75 (deliberately airier) |
-| Eyebrow | 10–11px / 600 / caps / 0.22em |
-| Stat number | 28–40px / 700 / −0.03em |
-| Table header | 10px / 600 / caps / 0.14em |
+| Pill | Colors | Meaning |
+|------|--------|---------|
+| `.pill-gray` | `#f1f1ef` / `#57564f` | Low urgency · Done project · default |
+| `.pill-green` | `#dbeddb` / `#1c3829` | Active project |
+| `.pill-yellow` | `#fdecc8` / `#402c1b` | Medium urgency · Paused · notices |
+| `.pill-red` | `#ffe2dd` / `#5d1715` | High urgency · Due now · errors · danger hover |
+| `.pill-blue` | `#d3e5ef` / `#183347` | Repeat cadence (Daily, Weekdays, Weekly, Monthly) |
+| `.pill-purple` | `#e8deee` / `#412454` | Reserved, unused |
 
-Signature moves: display headlines end with a **blue period** (`<span class="dot">.</span>`, or `?` for questions) · every section opens with an eyebrow · hierarchy comes from weight + tracking, not extra colors. Weights: 400 body, 500 nav, 600 headings/labels, 700 titles/numbers.
+**Section dot colors** come from the data, iOS-style: red `#ff3b30`, orange `#ff9500`,
+yellow `#f5c542`, green `#34c759`, blue `#007aff`, indigo `#5e5ce6`. They appear only as
+the 8px dot on a section header and the 7px dot in a row's section tag.
+
+### Typography
+
+Font stack: `ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif`.
+The platform font, never a web font. Base 15px / 1.45.
+
+| Role | Size / weight |
+|------|---------------|
+| Page title `.page-title` | 36px / 700 / −0.01em (28px on mobile) |
+| Editable title `.detail-title-input`, `.entry-title-input` | 34px / 700 (26px on mobile), placeholder `#d4d2cc` |
+| Empty-state title `.chat-empty-title` | 20px / 600 |
+| Search modal input | 17px |
+| Long-note body `.entry-body` | 15.5px / 1.6 |
+| Body, task text, quick-add input | 15px / 400 |
+| Nav item, tab, modal option, list title | 14px / 500 (600 when current or selected) |
+| Subtitle, breadcrumb, buttons, notes, chips | 13–14px muted |
+| Meta, counts, icon buttons, pills | 12px faint (pills 500) |
+| Section title `.section-title` | 13px / 600 / caps / 0.04em muted |
+| Column head, reminder section, group labels | 10.5–12px / 600 / caps / 0.04–0.05em faint |
+
+Weights: 400 body · 500 nav and pills · 600 current/selected, labels, buttons · 700
+titles only. Uppercase + tracking only on section and group labels. Emoji are the
+icons (☑ 📁 📝 📎 ⏰ 💬 📅 ⚙️ 🔍 ⋯).
 
 ### Shape and elevation
 
-- Radii: chips/pills `100px` · buttons and inner blocks `8–10px` · cards/tables `10–14px` · feature boxes (author box) `18px`.
-- Borders: 1px `border` on every card; rows divide with 1px `hairline`. Never boxes inside boxes.
-- Shadow, barely there: `0 1px 3px rgba(18,24,46,.05), 0 10px 30px rgba(18,24,46,.05)`.
-- The **highlight ring** `0 0 0 3px rgba(58,142,205,.12)` + blue border marks exactly one item per group (`.hl`).
-- Rhythm: content max-width 1180–1280px · sections pad 44–56px horizontally · 28px between sections · white sections sit on the `#EEF1F6` canvas.
+- Radii: rows, nav items, small buttons `6px` (`--radius`) · inputs, quick-add, menus, delete bar `8px` · cards, modals, info panels `10px` · search modal, login card, drop zone `12px` · chat composer and bubbles `14px` · group input and chat chips `12px` · checkboxes `3–4px`.
+- Borders: hairline `--border` for dividers and cards; `--border-strong` for anything typed into or pressed. No coloured borders except blue on focus and red (`#f0b8b8`) on the delete bar.
+- Shadow: flat by default. Floating things get `--shadow-card` (menus, modals, search). Cards get `0 2px 10px rgba(15,15,15,.07)` on hover only. Toast `0 5px 15px rgba(15,15,15,.2)`.
+- Focus: `border-color: var(--blue)` + `box-shadow: 0 0 0 3px var(--blue-soft)` on the container (`:focus-within`), never an outline on the inner input.
+- Rhythm: content column `max-width: 820px`, padded `56px 48px 120px` (`24px 16px 90px` on mobile). The projects overview widens to `1240px`. Rows are 6–10px padded and touch; whitespace separates them.
 
 ---
 
 ## 2 · App shell and navigation
 
-- **Topbar** `.shell-topbar`: white, 1px border, sticky (`.sticky`). Real logo lockup (`brill-logo.png`) at 32px tall, never a placeholder tile. Tabs `.shell-tabs`: 12.5px/500 ink-2; active is navy 600 with a 2px **orange** underline. Actions far right: outline for secondary saves, one filled blue primary. Labels never wrap.
-- **Sub-menu** `.subnav`: plain links separated by 1px pipes. Active and hover go blue. No underlines, no pills.
-- **Icon nav cards** `.navcards > .navcard`: 12px-radius outline cards, icon + 13.5px/600 label, 4-up grid. Active gets the blue border + glow ring.
-- **Buttons** `.btn` + `btn-primary | btn-outline | btn-soft | btn-dark | btn-ghost | btn-glass`: 10px corners, `white-space: nowrap`. One filled blue button in view at a time; it carries the soft blue shadow and a 1px hover lift. Dark navy only inside CTA bands; glass only on navy.
-- **Version badge** `.version-badge.fixed`: gray caps label + navy pill, bottom-right of the viewport.
+Three columns, left to right:
 
-## 3 · Hero patterns
+1. **Sidebar** `.sidebar`: 232px, `--sidebar` fill, sticky full height, `12px 8px` padding. Brand = the real logo at full width with "HQ Tasks" under it. Then `.sidebar-search` (bordered, ⌘K hint), then `.nav-item`s (emoji icon · 14px/500 muted label · faint count on the right). The current item gets `--active` fill, `--text` colour, 600. Under Long Notes, a collapsible `.note-groups-nav` of `.nav-subitem`s. Footer stats in faint 12px above a hairline, then the quiet `.signout-btn` (red on hover).
+2. **Second column** `.entries-sidebar`: 250px, `#fbfbfa`, only on Projects and Long Notes. Head = caps label with count + `+ New`. `.psb-filters` are tiny 11.5px chips (Active / Paused / Done / All / Archived). Items are `.entry-item`: 14px/500 title (600 selected), 11.5px faint date line, hover-revealed star that stays gold when pinned. Groups under `.psb-group` caps labels.
+3. **Main** `.main`: the scroll area holding one `.page` at a time.
 
-| Pattern | Class | Use |
-|---------|-------|-----|
-| A · Page hero band | `.hero-band` | Introduces a tool. Navy gradient 180° with two radial blue glows. Full-bleed (`.bleed`) at the top of a page or rounded as a card. |
-| B · Report hero card | `.hero-card` + `.hero-meta` | Names the subject, then a 3-up meta row (THE GOAL / THE NEED / THE OPPORTUNITY) divided by `rgba(255,255,255,.14)` hairlines. Keys 9.5px caps light blue, values 13px/600 white clamped to 2 lines. Swap for `.hero-flight` (FLIGHT · MARKET · TARGET) on planner pages. |
-| C · Inputs chip row | `.chips-row` + `.chip` | Echoes what the user entered, between the band and the card. First chip (the subject) is `.strong`; the edit affordance is a `.btn-ghost.edit` on the right. |
-| D · Launchpad hero | `.lp-hero` + `.glass-stats` | The biggest moment, one per product page. Eyebrow flanked by 26×1.5px blue dashes, title 76px/600, lede `#B9C2D8`, glass stat strip with `backdrop-filter: blur(8px)` and numbers in `#8FC0E8`. |
+**Mobile (≤760px)**: the sidebar becomes a wrapping row of nav chips, the second column stacks above the page (max 40vh), and a `.compact-bar` (logo · current title · `+ New` · `Entries` · `☰ Menu` buttons) toggles them. Task actions are always visible.
 
-## 4 · List patterns
+## 3 · Page anatomy
 
-Every list is preceded by a **section head** (`.section-head`): blue eyebrow → navy title → right-aligned meta ("5 MOVES", "2 FOUND") or a `HIDE –` toggle in blue, hairline below.
+Every list page opens the same way:
 
-| Pattern | Class | Numeral treatment |
-|---------|-------|-------------------|
-| A · Numbered priority list (the workhorse) | `.num-list > .num-item > .n/.t/.d` | Outlined blue digits: 32px/700, `color: transparent` + `-webkit-text-stroke: 1.6px blue`. Title 14px/600 navy, description 13px ink-2, hairline rows. Never circles or boxes here. |
-| B · Step circles | `.step-list > .step > .c/.t` | 26px solid-blue circles, white 700 digits. For sequences that are a *product* (the 9-point audit), inside tinted panels. |
-| C · Checklist | `.check-list > .check-item > .c/.t` | Green check in a 19px soft-green circle. Interactive variant: `<label class="check-item"><input type="checkbox"><span class="t">…</span></label>`. |
-| D · Presentation findings | `.finding-row` (+ `data-bh-findings` on the parent) | 72px solid-navy numeral, 30px title, 15px body capped at 560px, 44px row padding. Rows not yet reached sit at `opacity .32` and reveal on scroll. |
-| E · Numbered index rows | `.index-list > .index-row > .n/.t` under a `.panel-caps-title` | Zero-padded 12px/700 navy index (01, 02), 15.5px content. Quieter than the priority list. |
+```
+.page-title            36px title
+.page-subtitle         14px muted line carrying live counts
+.quick-add             one bordered row: faint "+" · borderless input · gray select · blue Add
+.controls-row          underline .tab s · spacer · .search-input · .sort-select · ⋯ .menu
+sections of rows
+```
 
-## 5 · Form patterns
+Detail pages (project, long note) instead open with a `.breadcrumb`, an editable
+title input with a ⋯ menu beside it, a collapsible `.props-toggle` ("Details" +
+status pill + due + count) over Notion-style `.prop-row`s (120px faint emoji label,
+borderless select or date), a borderless `.detail-notes` textarea, then a
+`.divider` and the body. Long notes add a rounded gray `.entry-group-input` chip
+and an `.entry-toolbar` of icon buttons (B · I · • List · ☑ Checklist · 🔗 Link · 📎 Attach).
 
-- `.form-head`: eyebrow step counter ("STEP 1 OF 2") + 26px title left; a `.segmented` mode toggle right (14px-radius container, active segment white with blue 600 text and a small shadow).
-- `.form-cols > .form-col`: columns divided by vertical hairlines, each opened by a blue caps `.form-group-label` (THE BUSINESS / THE NUMBERS / THE SITUATION).
-- `.field`: **underline-only** inputs. 14.5px/600 navy label, gray placeholder, 2px bottom border `#C9D2DD` that turns blue on focus, wine when `.invalid`. Optional hints ride the label in `.opt`. Selects add a chevron, textareas grow.
-- `.input-box`: the one boxed input, for "add a row" / search affordances inside tables and lists.
+Tabs underline in `--text`, not blue. The ⋯ `.menu` holds bulk and destructive
+actions (destructive rows are red text).
 
-## 6 · Data patterns
+## 4 · Rows and lists
 
-- **Stat tiles** `.stat-grid > .stat-tile`: caps eyebrow → 30px/700 navy number → 11px gray sub. The lead metric gets `.hl` (ring + blue number). 3-up by default, `.cols-4` available. Add `data-bh-count` + `data-bh-format` to animate.
-- **Data table** `table.data`: navy header with 10px caps white, channel cells lead with a 24px tinted icon tile (`.ch > .ico`), numbers right-aligned in `.num` cells, total row in `tfoot` separated by a 2px navy rule, prose columns in `.role`. Wrap in `.table-scroll` when it may overflow.
-- **Mix blocks** `.mix-row[data-bh-mix] > .mix-block[data-share]`: sized by share, colored blue → orange → navy-soft in budget order. **Progress** `.progress[data-bh-progress]`: 6px hairline track, blue fill.
+| Row | Anatomy |
+|-----|---------|
+| **Section** `.section-header` | 11px faint caret (rotates −90° collapsed) · 8px colour `.section-dot` · 13px caps muted `.section-title` · 12px faint `.section-count`. Whole row is the toggle. |
+| **Task** `.task-row` | 16px `.checkbox` (blue fill + white tick when `.checked`) · `.task-text` 15px · `.task-meta` 12px faint (section tag with dot when sorted by date · date · 📝 note preview) · `.task-actions` (Note / → Project / Edit / Archive) fade in on hover. `.done` = faint + strike-through. An open note is a gray `.notes-area` textarea under the text. Inline edit swaps in `.task-edit-input` (blue border + ring). |
+| **Project to-do** `.ptodo-row` | Same as a task plus a lowercase clickable urgency `.pill` on the right (low gray · medium yellow · high red) that cycles on click. Sorted high → low. Completed to-dos fold into a collapsible "Completed" section. |
+| **Reminder** `.rem-row` | Hairline-divided. 15px `.rem-title` · 12.5px muted `.rem-when` (goes `#c4554d`/500 when overdue with a red **Due now** pill; blue pill for cadence) · 13px muted `.rem-notes` · always-visible actions (✓ Done · ⏲ +1h · ✕). Grouped under `.rem-section-title` caps labels (Upcoming · Delivered · Done). |
+| **Project (list)** `.project-row` | Emoji · 15px/600 name · 4px `.p-bar` progress (gray track, blue fill, max 160px) · faint `.p-count` · status pill · `.p-due`. Hairline-divided. |
+| **File** `.file-row` | 40px `.file-thumb` for images (click → lightbox) or a faint caps `.file-ext` badge · `.file-name` link (blue on hover) · faint `.file-meta` · ✕. The aggregate Files view is a 6-column grid with a caps header row. |
+| **Empty** `.empty-note` | Centered 14px faint sentence. |
 
-## 7 · Cards and callouts
+Rows show `--hover` fill on hover. Only reminders, files and project lists divide
+with hairlines; task rows never do.
 
-- **Standard card** `.card`: white, 1px border, 10px radius, whisper shadow, caps `.card-eyebrow` first.
-- **Highlight panel** `.panel-tint` + **quote box** `.quote-box`: blue tint marks "the answer"; the dashed blue box holds ready-to-use copy. Dashed border means "copy this text" (add a `data-bh-copy` button).
-- **CTA row** `.cta-row`: copy left, one filled blue button right.
-- **Dark CTA band** `.cta-dark`: closes a page. Two stacked actions, filled blue + glass outline.
-- **Package cards** `.pkg-grid > .pkg-card`: 14px-radius, two-tone number (`0` in `#C4CBD9`, digit in blue), navy `.count` badges on deliverable rows.
-- **Status pills** `.pill.pill-gray|blue|green|orange|wine|navy` for app list states.
+## 5 · Pills, dots and states
 
-## 8 · Author box and summary box
+- `.pill`: 12px / 500, `1px 8px` padding, 4px radius, no border, no icon. Meanings are fixed (see § 1).
+- `.urg-dot` 6px: low `#d3d1cb` · medium `#e9b44c` · high `#eb5757`. Used inside overview cards.
+- Task priority (Urgent `#eb5757` · High `#f2994a` · Normal `#2383e2` · Low `#9b9a97`) colours the inbox section, not a pill on the row.
+- Checkbox states: default (`.14` border) → hover (blue border) → `.checked` (blue fill, white tick). `.select-box.checked` is red for delete mode. Long-note checklists use `ul.checklist li.checked`.
 
-`.author-box`: 18px radius, 96px avatar circle, gray caps eyebrow, 16.5px/1.75 body with orange-deep underlined links, then a hairline-divided 3-stat row.
-`.summary-box`: same anatomy without the avatar, blue eyebrow, key phrases bold in navy, the 3 numbers that matter. One paragraph + 3 stats, no more. Use it to close a diagnostic, cap a long section, or open a one-pager.
+## 6 · Inputs and buttons
+
+**Buttons**
+
+| Class | Look | Use |
+|-------|------|-----|
+| `.new-btn.primary`, `.add-btn`, `.chat-send`, login button | Blue fill, white 600 text, 6px radius (10px in the composer, 8px on login) | The one filled button per surface |
+| `.new-btn` | White, `.14` border, 13px/500 | Cancel, Turn off, secondary |
+| `.new-btn.danger-solid` | Red fill | Only in the delete bar |
+| `.icon-btn` | 12px faint text, 4px hover fill; `.danger` goes red on hover | Row verbs: Note · → Project · Edit · Archive · ✓ Done · ✕ |
+| `.link-btn`, `.file-name` | Blue text | Links |
+| `.danger-link` | Faint text, red on hover | "Delete this project…" in the danger zone |
+| `.cb-btn` | White chip, 8px | Compact bar |
+| `.chat-chip` | 12px white chip, 12px radius | Assistant results |
+
+**Inputs**, two families:
+
+- *Bordered containers* (`.quick-add`, `.proj-search`, `.sidebar-search`, `.modal-body` fields, `.chat-composer`): `.14` border, 8px radius, blue border + 3px ring on `:focus-within`. The input inside has no border of its own. Selects inside are gray chips (`--sidebar` fill, 13px muted).
+- *Bare inputs* (`.detail-title-input`, `.entry-title-input`, `.detail-notes`, `.card-add`, `.prop-value select/input`): no border, transparent, read as text until clicked. Exception: `.notes-area` is a sidebar-gray box with a hairline that turns blue on focus.
+
+Placeholders are `--faint` (titles `#d4d2cc`).
+
+## 7 · Cards and panels
+
+- **Overview card** `.proj-card`: 10px hairline card in `.cards-grid` (auto-fill, min 300px). Head = 14.5px/600 name + status pill. Progress strip. Up to a few `.card-todo`s (14px checkbox · `.urg-dot` · 13px text · 📝 flag) then `.card-more`, then a borderless `.card-add` input under a hairline. Hover: `.14` border + whisper shadow. Grouped under `.ov-group` caps labels.
+- **Info card** `.push-card`: sidebar-gray, hairline, 10px, 13.5px muted copy with the lead in `--text`, action on the right. Used for push and SMS setup.
+- **Delete bar** `.delete-bar`: the only red-bordered surface (`#f0b8b8` on `#fdf0ef`) with Cancel + red Delete selected.
+- **Notice** `.chat-notice`: the yellow pill pair as a block.
+- **Chat** `.chat-msg.user` blue bubble right-aligned, `.chat-msg.assistant` gray bubble with hairline, `.chat-msg.error` red pair; 14px radius with a 4px inner corner. Results are `.chat-chip`s (`.failed` red). `.chat-composer` is a sticky 14px-radius bordered box with a mic toggle that pulses red while listening.
+
+## 8 · Overlays and feedback
+
+- **Modal** `.modal-overlay` `rgba(15,15,15,.45)`, card 420px at 12vh from the top: 10px radius, `--shadow-card`, `.modal-head` 14px/600 with faint `.modal-sub`, `.modal-list` of `.modal-option`s or a `.modal-body` form, `.modal-foot` right-aligned above a hairline (secondary then primary).
+- **Global search** (⌘K) `.search-modal`: 600px, 12px radius, 17px borderless input over a hairline, results grouped under `.search-group-label`s; arrow keys move `.active`.
+- **Menu** `.menu`: hangs under ⋯, right-aligned, 8px radius, 13px rows, red text for destructive.
+- **Toast** `.toast`: bottom-centre, `#2f2f2c`, 13px white, 8px radius, 1.9s, slides up 16px.
+- **Login** `.auth-card`: 320px white card on the sidebar gray, logo 34px, 18px title, 8px inputs, full-width blue button, red error line.
+- **Drop zone** `.drop-overlay`: dashed blue 12px box with `--blue-soft` fill over a note or project while dragging files.
+- **Lightbox**: `rgba(0,0,0,.85)` backdrop, image at 8px radius.
 
 ## 9 · Page templates
 
-Both archetypes share the spine: **shell → dark hero → summary strip → sections separated by section-heads**. Sections stack at full content width; two-column grids appear only *inside* a section.
+All six views share one spine: **sidebar → (second column) → page: title / subtitle → one input row → controls → sections of rows.**
 
-**A · Diagnostic / report page**
-topbar → hero band → inputs chip row → report hero card + 3-up meta → § numbered list (what needs improvement) → § numbered list (opportunities) → § channel table → § CTA row → § tinted panel + steps → § checklist (quick wins) → summary / author box.
+| View | Column(s) | Body |
+|------|-----------|------|
+| Tasks | sidebar | title · quick-add (priority select) · tabs + search + sort + ⋯ · colour-dotted sections of task rows |
+| Project detail | sidebar · projects list | breadcrumb · editable title + ⋯ · Details toggle + props · notes · divider · quick-add (urgency) · to-do rows · Completed · files · danger zone |
+| Projects overview | sidebar · projects list | wide page · group labels · card grid |
+| Long notes | sidebar + groups · entries list | editable title · date · group chip · toolbar · rich-text body · files |
+| Reminders | sidebar | title · push card · SMS card · quick-add (when · repeat) · Upcoming / Delivered / Done sections |
+| Assistant | sidebar | title · chat log · sticky composer · hint |
+| Files | sidebar | title · search · 6-column grid |
 
-**B · Planner / dashboard page**
-topbar → hero card + flight strip → KPI strip → 3-up stat tiles → § table + add-row input → audience card | reach curve → § mix blocks + detail → § collapsible reach & frequency.
+Everything editable is edited in place; there are no edit pages and no Save
+buttons. Collapsing is always a caret on the label itself.
 
-## 10 · Rules of the look
+## 10 · Rules
 
 **Do**
-- Open every section with an eyebrow, and every page with a navy hero.
-- End display headlines with the blue period (or `?` for questions).
-- Separate list rows with hairlines; let whitespace do the framing.
-- Right-align a counter or toggle in every section head.
-- Reserve the highlight ring for exactly one item per group.
-- Use the tinted panel + dashed quote box for "the deliverable".
-- Close long reports with the summary-box pattern: one paragraph + 3 stats.
-- Give buttons 10px corners and room to breathe; a label never wraps.
-- Use the real Brill Media logo in the shell; sub-menus are pipe-divided links.
+- Build every view as title → subtitle with counts → one quick-add row → tabs/controls → sections of rows.
+- Use the three text grays for hierarchy; use blue only for "action" and "on".
+- Let rows touch and show a `--hover` fill; reveal row actions on hover (always on touch).
+- Make titles and notes editable in place; save on blur or Enter.
+- Keep pill meanings fixed: green Active, yellow Paused/medium, gray Done/low, red high/Due now, blue cadence.
+- Put bulk and destructive actions behind the ⋯ menu; confirm deletes with the red delete bar.
+- Focus with the blue border + 3px soft ring on the container.
+- Use an emoji as the icon; 6px radius on rows and small controls, 8px on inputs, 10px on cards.
+- Confirm quiet actions with the dark toast; keep counts live in the sidebar and subtitles.
 
 **Don't**
-- Don't use orange for buttons or body links. Orange is brand + mix-bar color; blue is the action color (exception: prose links in the author box).
-- Don't nest cards inside cards; one border per container.
-- Don't introduce new grays. Stick to ink-2 / ink-3 / border / hairline.
-- Don't use heavy shadows or dark mode; this system is paper-white with navy anchors.
-- Don't put more than one filled blue button in view at a time.
-- Don't use green outside checkmarks/success, or wine outside gap/negative flags.
+- Don't add colour for decoration: no coloured headings, tinted sections, gradients or dark mode.
+- Don't put more than one filled blue button on a surface, and never a red one outside delete mode.
+- Don't box rows in cards or add borders between task rows.
+- Don't introduce a web font, a new gray, or a new pill colour.
+- Don't use uppercase outside section and group labels; don't use bold outside titles, current items and buttons.
+- Don't put shadows on things that don't float.
+- Don't add a separate edit screen or a Save button.
 
-## 11 · Behaviors (brill-hero.js)
+## 11 · Behaviour notes
 
-| Hook | Effect |
-|------|--------|
-| `data-bh-tabs` on `.shell-tabs`, `.subnav`, `.navcards`, `.segmented` | Click sets `.active` / `aria-selected`; items with `data-target="#id"` show that panel and hide sibling `[data-bh-panel]`s. Arrow keys move focus. Emits `bh:tabchange`. |
-| `data-bh-toggle="#id"` on a section-head button | Collapses/expands; relabels itself `Hide –` / `Show +`. Emits `bh:toggle`. |
-| `data-bh-findings` on a `.finding-row` container | Scroll reveal: in-view rows full strength, the rest dimmed. Respects `prefers-reduced-motion`. |
-| `data-bh-copy="#id"` or `data-bh-copy-text="…"` | Copies to clipboard, flashes "Copied". |
-| `data-bh-progress="42"` on `.progress` | Animates the fill and sets ARIA values. |
-| `data-bh-mix` on `.mix-row` | Sizes `.mix-block[data-share]` by share, auto-colors, emits `bh:mixselect`. |
-| `data-bh-count="146952" data-bh-format="currency|number|compact|percent|multiplier"` | Formats and counts up a number. |
-| `data-bh-print` | Triggers `window.print()`; print styles hide the shell and flatten panels ("Save as PDF"). |
-| `BrillHero.toast(msg, {kind:'success'|'error', action, onAction})` | Navy toast bottom-right. |
-| `BrillHero.init(root)` | Re-wire after re-rendering a region. |
+- State renders from data: `render()` rebuilds the visible page's HTML; actions are `data-action` attributes handled by one delegated click listener.
+- Sections, Details and note groups remember their collapsed state (localStorage).
+- Row actions: Note toggles a `.notes-area` under the row; → Project opens the picker modal; Edit swaps in the inline input; Archive hides the task (Archived tab restores).
+- Delete mode replaces checkboxes with red select boxes and shows the delete bar until Cancel or confirm.
+- Toast confirms archive, move, delete, copy and reminder actions for 1.9s.
+- Drag files anywhere over a note or project to attach; images open in the lightbox.
+- ⌘K opens global search from any view; arrow keys and Enter navigate results.
