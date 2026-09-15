@@ -13,6 +13,10 @@ The app's look is documented in `design/`:
   page templates, do/don't rules, behaviour notes.
 - `design/brill-hq-design-reference.html` — a self-contained page that renders every
   pattern with the app's own CSS. Open it to see what "right" looks like.
+- `design/FUNCTIONALITY.md` — what the app does: every view and action, the data
+  model, sync and polling, reminders delivery, the assistant's tools, server functions.
+- `design/brill-hq-functionality-reference.html` — the same, as a self-contained
+  page with annotated screens and flows.
 
 The CSS source of truth is the `<style>` block in `index.html`; the class names in
 the docs are the app's real class names.

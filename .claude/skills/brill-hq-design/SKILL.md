@@ -9,7 +9,7 @@ The full spec is `design/DESIGN.md`. The visual reference is
 `design/brill-hq-design-reference.html` (every pattern rendered with the app's own
 CSS). The CSS itself lives in the `<style>` block of `index.html`; the class names
 below are the app's real class names, so reuse them rather than inventing new ones.
-Read `DESIGN.md` before building anything non-trivial; this file is the short version.
+Behaviour (what each view and action does, the data model, sync, reminders, the assistant) is in `design/FUNCTIONALITY.md` with a rendered companion at `design/brill-hq-functionality-reference.html`. Read `DESIGN.md` before building anything non-trivial; this file is the short version.
 
 ## Build order for any view
 
@@ -58,7 +58,7 @@ Detail views instead open with `.breadcrumb` → `.detail-title-input` (an input
 - Add CSS to the existing `<style>` block under the matching `/* ==== Section ==== */` comment, using the `--*` tokens. Prefer extending an existing class.
 - Markup is produced by render functions returning template strings; actions are `data-action` attributes handled by the delegated click listener. Follow that pattern rather than adding per-element listeners.
 - Escape user text with `escHtml()`.
-- Read `design/DESIGN.md` § 11 for the behaviours (collapse memory, delete mode, drag-to-attach, ⌘K search).
+- Read `design/FUNCTIONALITY.md` before changing behaviour: it lists every action, the save/sync rules (never re-render over an in-progress edit), inbox routing, reminder delivery and the assistant's action contract.
 
 ## Verify
 
