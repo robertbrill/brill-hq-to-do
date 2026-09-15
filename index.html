@@ -895,6 +895,12 @@
   }
   .entry-group-input:focus { background: var(--hover); box-shadow: 0 0 0 2px var(--blue-soft); }
   .entry-group-input::placeholder { color: var(--faint); }
+  /* Title, date, group picker and formatting bar are wrapped in .entry-header
+     purely so the desktop rule below can stick them as one block. Everywhere
+     else the wrapper is display:contents, so the four stay direct children of
+     #entry-detail and the narrow-screen sticky toolbar keeps working. */
+  .entry-header { display: contents; }
+
   .entry-toolbar {
     display: flex;
     gap: 2px;
@@ -938,6 +944,28 @@
     text-align: center;
   }
   .entry-body ul.checklist li.checked { color: var(--faint); text-decoration: line-through; }
+
+  @media (min-width: 761px) {
+    /* Desktop: the note header rides along at the top of the pane while the
+       body scrolls underneath it, so the title and the formatting buttons stay
+       reachable in a long note. The page's own top padding moves onto the
+       header so that padding scrolls away with it, leaving a smaller gap above
+       the title once it's pinned. */
+    #page-personal { padding-top: 38px; }
+    .entry-header {
+      display: block;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--bg);
+      /* bleed over the page gutters so body text doesn't slide past beside it */
+      margin: 0 -48px;
+      padding: 18px 48px;
+    }
+    /* the toolbar's gap becomes header padding: a margin is transparent, so
+       text scrolling under it would show through */
+    .entry-header .entry-toolbar { margin-bottom: 0; }
+  }
 
   /* ============ Modal ============ */
   .modal-overlay {
@@ -2495,24 +2523,26 @@ function renderEntryDetail() {
   if (detail.dataset.noteKey === key && isTypingInEntryDetail(detail)) return;
   detail.dataset.noteKey = key;
   detail.innerHTML = `
-    <input class="entry-title-input" data-role="entry-title" placeholder="Untitled" value="${escHtml(item.title || "")}">
-    <div class="entry-detail-date">${escHtml(formatEntryDate(item.createdAt))}${item.updatedAt ? " &middot; edited " + escHtml(formatEntryDate(item.updatedAt)) : ""}</div>
-    <input class="entry-group-input" data-role="entry-group" list="entry-group-list" placeholder="&#128193; Add to a group&hellip;" value="${escHtml(item.group || "")}">
-    <datalist id="entry-group-list">${noteGroups().map(g => `<option value="${escHtml(g)}"></option>`).join("")}</datalist>
-    <div class="entry-toolbar">
-      <button class="icon-btn" data-action="fmt" data-cmd="bold"><b>B</b></button>
-      <button class="icon-btn" data-action="fmt" data-cmd="italic"><i>I</i></button>
-      <button class="icon-btn" data-action="fmt" data-cmd="strikeThrough"><s>S</s></button>
-      <button class="icon-btn" data-action="fmt" data-cmd="insertUnorderedList">&bull; List</button>
-      <button class="icon-btn" data-action="fmt" data-cmd="insertOrderedList">1. List</button>
-      <button class="icon-btn" data-action="checklist">&#9745; Check</button>
-      <button class="icon-btn" data-action="fmt" data-cmd="removeFormat">Clear</button>
-      <div class="controls-spacer"></div>
-      <div class="menu-wrap">
-        <button class="icon-btn" data-action="toggle-menu" title="More options">&#8943;</button>
-        <div class="menu">
-          <button data-action="archive-entry">${item.archived ? "&#8617; Unarchive" : "&#128230; Archive"}</button>
-          <button class="danger" data-action="delete-entry">Delete&hellip;</button>
+    <div class="entry-header">
+      <input class="entry-title-input" data-role="entry-title" placeholder="Untitled" value="${escHtml(item.title || "")}">
+      <div class="entry-detail-date">${escHtml(formatEntryDate(item.createdAt))}${item.updatedAt ? " &middot; edited " + escHtml(formatEntryDate(item.updatedAt)) : ""}</div>
+      <input class="entry-group-input" data-role="entry-group" list="entry-group-list" placeholder="&#128193; Add to a group&hellip;" value="${escHtml(item.group || "")}">
+      <datalist id="entry-group-list">${noteGroups().map(g => `<option value="${escHtml(g)}"></option>`).join("")}</datalist>
+      <div class="entry-toolbar">
+        <button class="icon-btn" data-action="fmt" data-cmd="bold"><b>B</b></button>
+        <button class="icon-btn" data-action="fmt" data-cmd="italic"><i>I</i></button>
+        <button class="icon-btn" data-action="fmt" data-cmd="strikeThrough"><s>S</s></button>
+        <button class="icon-btn" data-action="fmt" data-cmd="insertUnorderedList">&bull; List</button>
+        <button class="icon-btn" data-action="fmt" data-cmd="insertOrderedList">1. List</button>
+        <button class="icon-btn" data-action="checklist">&#9745; Check</button>
+        <button class="icon-btn" data-action="fmt" data-cmd="removeFormat">Clear</button>
+        <div class="controls-spacer"></div>
+        <div class="menu-wrap">
+          <button class="icon-btn" data-action="toggle-menu" title="More options">&#8943;</button>
+          <div class="menu">
+            <button data-action="archive-entry">${item.archived ? "&#8617; Unarchive" : "&#128230; Archive"}</button>
+            <button class="danger" data-action="delete-entry">Delete&hellip;</button>
+          </div>
         </div>
       </div>
     </div>
