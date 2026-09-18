@@ -25,6 +25,7 @@
     --active: rgba(0, 0, 0, 0.06);
     --blue: #2383e2;
     --blue-soft: rgba(35, 131, 226, 0.10);
+    --highlight: #fff2a8;      /* text highlighter in Long Notes */
     --pill-gray-bg: #f1f1ef;   --pill-gray-tx: #57564f;
     --pill-green-bg: #dbeddb;  --pill-green-tx: #1c3829;
     --pill-yellow-bg: #fdecc8; --pill-yellow-tx: #402c1b;
@@ -118,6 +119,8 @@
   .note-groups-nav .ngl-caret { font-size: 8px; transition: transform 0.12s; display: inline-block; }
   .note-groups-nav.collapsed .ngl-caret { transform: rotate(-90deg); }
   .note-groups-nav.collapsed .nav-subitem { display: none; }
+  .note-groups-nav .ng-rules { color: var(--faint); font-size: 12px; }
+  .note-groups-nav .ng-rules:hover { color: var(--text); }
   .nav-subitem {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     width: 100%; text-align: left; border: none; background: transparent;
@@ -917,6 +920,8 @@
     word-break: break-word;
   }
   .entry-body:empty::before { content: "Write something\2026"; color: var(--faint); }
+  .entry-body mark { background: var(--highlight); color: inherit; }
+  .icon-btn .hl-swatch { background: var(--highlight); color: var(--text); padding: 0 4px; border-radius: 3px; font-weight: 600; }
   .entry-body a { color: var(--blue); }
   .entry-body ul, .entry-body ol { padding-left: 22px; margin: 4px 0; }
   /* checklist: a <ul class="checklist"> whose items have a tickable box */
@@ -1033,6 +1038,11 @@
     width: 100%;
   }
   .modal-body input[type="text"]:focus, .modal-body select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .modal-body textarea {
+    border: 1px solid var(--border-strong); border-radius: 6px; font: inherit; font-size: 13.5px;
+    padding: 8px 10px; background: var(--bg); color: var(--text); outline: none; width: 100%; resize: vertical; line-height: 1.5;
+  }
+  .modal-body textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
 
   /* ============ Toast ============ */
   .toast {
@@ -1536,6 +1546,24 @@
       <div class="modal-foot">
         <button class="new-btn" type="button" data-action="newtask-cancel">Cancel</button>
         <button class="new-btn primary" type="submit">Add task</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="autogroup-overlay">
+  <div class="modal-card">
+    <form id="autogroup-form">
+      <div class="modal-head">Auto-group rules<div class="modal-sub">A note with no group is filed under the first group whose keyword appears in its title or text. Existing group names count as keywords too.</div></div>
+      <div class="modal-body">
+        <label for="autogroup-rules">One rule per line &mdash; Group: keyword, keyword</label>
+        <textarea id="autogroup-rules" rows="7" spellcheck="false" placeholder="Predictable Profits: predictable profits, ppai&#10;Client Calls: client call"></textarea>
+      </div>
+      <div class="modal-foot">
+        <button class="new-btn" type="button" data-action="autogroup-reset">Reset to defaults</button>
+        <div class="controls-spacer"></div>
+        <button class="new-btn" type="button" data-action="autogroup-cancel">Cancel</button>
+        <button class="new-btn primary" type="submit">Save &amp; file notes</button>
       </div>
     </form>
   </div>
@@ -2532,6 +2560,7 @@ function renderEntryDetail() {
         <button class="icon-btn" data-action="fmt" data-cmd="bold"><b>B</b></button>
         <button class="icon-btn" data-action="fmt" data-cmd="italic"><i>I</i></button>
         <button class="icon-btn" data-action="fmt" data-cmd="strikeThrough"><s>S</s></button>
+        <button class="icon-btn" data-action="highlight" title="Highlight (&#8984;&#8679;H)"><span class="hl-swatch">H</span></button>
         <button class="icon-btn" data-action="fmt" data-cmd="insertUnorderedList">&bull; List</button>
         <button class="icon-btn" data-action="fmt" data-cmd="insertOrderedList">1. List</button>
         <button class="icon-btn" data-action="checklist">&#9745; Check</button>
@@ -2560,6 +2589,136 @@ function noteGroups() {
     if (g && !seen.includes(g)) seen.push(g);
   });
   return seen.sort((a, b) => a.localeCompare(b));
+}
+
+/* ---------- auto-grouping ----------
+   A Long Note that hasn't been given a group is filed automatically when its
+   title or text mentions a keyword. Keywords come from two places:
+     1. the rules below — "Group: keyword, keyword" lines, editable from
+        ⚙ Auto-group rules in the sidebar and kept in this browser;
+     2. every existing group name (plus its singular, so a "Client Calls" group
+        also catches "client call").
+   The title is checked before the body, and rules before group names, so the
+   first line of the rules wins a tie. A group typed or cleared by hand in the
+   note's group box is left alone for the rest of the session. */
+const AUTO_GROUP_RULES_KEY = "v2-note-autogroup-rules";
+const AUTO_GROUP_BACKFILL_KEY = "v2-note-autogroup-backfilled";
+const DEFAULT_AUTO_GROUP_RULES = "Predictable Profits: predictable profits, ppai\nClient Calls: client call";
+let autoGroupTimer = null;
+let autoGroupRefreshPending = false;   // sidebar re-group deferred until the editor loses focus
+
+function autoGroupRulesText() {
+  try { const v = localStorage.getItem(AUTO_GROUP_RULES_KEY); return v === null ? DEFAULT_AUTO_GROUP_RULES : v; }
+  catch (e) { return DEFAULT_AUTO_GROUP_RULES; }
+}
+
+function parseAutoGroupRules(text) {
+  const rules = [];
+  String(text || "").split("\n").forEach(line => {
+    line = line.trim();
+    if (!line || line.startsWith("#")) return;
+    const i = line.indexOf(":");
+    const group = (i === -1 ? line : line.slice(0, i)).trim();
+    const keywords = (i === -1 ? group : line.slice(i + 1)).split(",").map(k => k.trim().toLowerCase()).filter(Boolean);
+    if (group && keywords.length) rules.push({ group, keywords });
+  });
+  return rules;
+}
+
+function autoGroupRules() {
+  const rules = parseAutoGroupRules(autoGroupRulesText());
+  const known = new Set(rules.map(r => r.group.toLowerCase()));
+  noteGroups().forEach(g => {
+    const lower = g.toLowerCase();
+    if (known.has(lower)) return;
+    known.add(lower);
+    const keywords = [lower];
+    if (lower.length > 3 && lower.endsWith("s")) keywords.push(lower.slice(0, -1));
+    rules.push({ group: g, keywords });
+  });
+  return rules;
+}
+
+function escapeRegExp(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+// keyword must start at a word boundary; it may run on ("client call" matches "client calls")
+function textMentions(text, keyword) {
+  return new RegExp("(^|[^a-z0-9])" + escapeRegExp(keyword)).test(text);
+}
+
+function autoGroupFor(item, rules) {
+  rules = rules || autoGroupRules();
+  const title = String(item.title || "").toLowerCase();
+  const body = stripHtml(item.body || "").toLowerCase();
+  for (const text of [title, body]) {
+    if (!text.trim()) continue;
+    for (const r of rules) if (r.keywords.some(k => textMentions(text, k))) return r.group;
+  }
+  return "";
+}
+
+// file `item` if it is ungrouped and matches a rule; true when its group changed
+function maybeAutoGroup(item, rules) {
+  if (!item || item.groupManual || (item.group || "").trim()) return false;
+  const g = autoGroupFor(item, rules);
+  if (!g) return false;
+  item.group = g;
+  item.updatedAt = new Date().toISOString();
+  return true;
+}
+
+// called as the open note is typed into: debounced so long notes aren't re-scanned per keystroke
+function scheduleAutoGroup(item) {
+  if (!item || item.groupManual || (item.group || "").trim()) return;
+  clearTimeout(autoGroupTimer);
+  autoGroupTimer = setTimeout(() => {
+    const cur = personalItems[selectedEntryIndex];
+    if (cur !== item || !maybeAutoGroup(item)) return;
+    queueSave();
+    const groupInput = document.querySelector('[data-role="entry-group"]');
+    if (groupInput) groupInput.value = item.group;
+    renderNoteGroupsNav();                 // counts only — the entry list waits for blur so it can't jump mid-word
+    autoGroupRefreshPending = true;
+    showToast(`Filed under ${item.group}`);
+  }, 500);
+}
+
+// after the editor loses focus: if the open note was auto-filed while typing,
+// follow it into its group so the list matches what's open
+function flushAutoGroupRefresh() {
+  if (!autoGroupRefreshPending) return;
+  autoGroupRefreshPending = false;
+  const item = personalItems[selectedEntryIndex];
+  if (item && !noteMatchesView(item) && (item.group || "").trim()) selectedNoteGroup = item.group.trim();
+  renderPersonal();
+}
+
+// file every ungrouped note that matches a rule; returns how many moved
+function autoGroupAllNotes() {
+  const rules = autoGroupRules();
+  let n = 0;
+  personalItems.forEach(item => { if (maybeAutoGroup(item, rules)) n++; });
+  if (n) queueSave();
+  return n;
+}
+
+function openAutoGroupRules() {
+  document.getElementById("autogroup-rules").value = autoGroupRulesText();
+  document.getElementById("autogroup-overlay").classList.add("open");
+  document.getElementById("autogroup-rules").focus();
+}
+
+function closeAutoGroupRules() {
+  document.getElementById("autogroup-overlay").classList.remove("open");
+}
+
+function saveAutoGroupRules() {
+  const text = document.getElementById("autogroup-rules").value;
+  try { localStorage.setItem(AUTO_GROUP_RULES_KEY, text); } catch (e) {}
+  closeAutoGroupRules();
+  const n = autoGroupAllNotes();
+  showToast(n ? `Rules saved · filed ${n} note${n === 1 ? "" : "s"}` : "Rules saved");
+  if (view === "personal") renderPersonal();
 }
 
 // first personalItems index whose archived state matches the current view (or -1)
@@ -2595,6 +2754,7 @@ function renderNoteGroupsNav() {
   html += sub("__all__", "All notes", pool.length);
   html += names.map(g => sub(g, g, counts[g])).join("");
   if (ungrouped) html += sub("__ungrouped__", "Ungrouped", ungrouped);
+  html += `<button class="nav-subitem ng-rules" data-action="autogroup-rules" title="Notes are filed into a group automatically when they mention one of its keywords">&#9881; Auto-group rules</button>`;
   nav.innerHTML = html;
 }
 
@@ -2605,6 +2765,23 @@ function renderPersonal() {
   if (!sel || !noteMatchesView(sel)) selectedEntryIndex = firstVisibleNoteIndex();
   renderEntriesList();
   renderEntryDetail();
+}
+
+// ⌘N / Ctrl+N: create the thing this screen is for. Long Notes → a new note;
+// Projects → a task in the open project (the same dialog as "+ New");
+// Assistant → the message box; everything else → the Tasks quick-add.
+function startNewForCurrentView() {
+  if (document.querySelector(".modal-overlay.open")) return;   // a dialog is already up
+  if (view === "personal") { newEntry(); return; }
+  if (view === "projects") { openNewTaskDialog(); return; }
+  if (view === "assistant") {
+    const inp = document.getElementById("chat-input");
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    return;
+  }
+  if (view !== "tasks") { setView("tasks"); if (isCompact()) setCompactNav(false); }
+  const input = document.getElementById("new-task-input");
+  if (input) { input.focus(); input.scrollIntoView({ block: "nearest" }); }
 }
 
 function newEntry() {
@@ -3451,6 +3628,7 @@ document.addEventListener("click", e => {
       if (item) { item.body = body.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
     }
   }
+  if (a === "highlight") toggleHighlight();
   if (a === "checklist") {
     const body = document.querySelector('[data-role="entry-body"]');
     if (body) {
@@ -3470,6 +3648,9 @@ document.addEventListener("click", e => {
   if (a === "toggle-props") { detailPropsOpen = !detailPropsOpen; renderProjectDetail(); }
   if (a === "new-project") openNewTaskDialog();
   if (a === "newtask-cancel") closeNewTaskDialog();
+  if (a === "autogroup-rules") openAutoGroupRules();
+  if (a === "autogroup-cancel") closeAutoGroupRules();
+  if (a === "autogroup-reset") document.getElementById("autogroup-rules").value = DEFAULT_AUTO_GROUP_RULES;
   if (a === "open-project") { setOverview(false); activeProjectId = el.dataset.id; setView("projects"); if (isCompact()) setCompactList(false); }
   if (a === "open-note") {
     const idx = personalItems.findIndex(n => n && n.id === el.dataset.id);
@@ -3562,7 +3743,7 @@ document.getElementById("newtask-form").addEventListener("submit", e => {
 
 /* keep the editor's text selection when clicking a format button */
 document.addEventListener("mousedown", e => {
-  if (e.target.closest('[data-action="fmt"]')) e.preventDefault();
+  if (e.target.closest('[data-action="fmt"], [data-action="highlight"]')) e.preventDefault();
 });
 
 /* close ⋯ menus when clicking anywhere outside them */
@@ -3580,6 +3761,60 @@ document.addEventListener("click", e => {
   const item = personalItems[selectedEntryIndex];
   if (item && body) { item.body = body.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
 });
+
+/* ---------- text highlighter (Long Notes) ---------- */
+const HIGHLIGHT_COLOR = "#fff2a8";   // keep in step with --highlight in the CSS
+const NO_BG = new Set(["", "transparent", "rgba(0, 0, 0, 0)", "initial", "inherit", "unset"]);
+
+function saveNoteBody(body) {
+  const item = personalItems[selectedEntryIndex];
+  if (item && body) { item.body = body.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
+}
+
+// is the start of the selection already sitting inside a highlighted run?
+function selectionIsHighlighted(body) {
+  const sel = window.getSelection();
+  let node = sel && sel.rangeCount ? sel.anchorNode : null;
+  if (node && node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+  while (node && node !== body) {
+    if (node.nodeName === "MARK") return true;
+    if (node.style && !NO_BG.has(node.style.backgroundColor)) return true;
+    node = node.parentNode;
+  }
+  return false;
+}
+
+// After a highlight is removed the browser leaves behind spans whose background
+// is "transparent". Strip that style, and unwrap the wrappers that are then empty.
+function unwrapClearedHighlights(body) {
+  body.querySelectorAll("[style], mark").forEach(el => {
+    if (el.style && NO_BG.has(el.style.backgroundColor) && el.style.backgroundColor !== "") el.style.backgroundColor = "";
+    if (el.hasAttribute("style") && !el.getAttribute("style").trim()) el.removeAttribute("style");
+    const bare = !el.attributes.length;
+    if ((el.tagName === "SPAN" || el.tagName === "FONT") && bare) {
+      const parent = el.parentNode;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+    }
+  });
+}
+
+// Toggle a yellow highlight on the selected text in the open Long Note.
+// Toolbar button and ⌘⇧H / Ctrl+Shift+H.
+function toggleHighlight() {
+  const body = document.querySelector('[data-role="entry-body"]');
+  if (!body) return;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !body.contains(sel.anchorNode)) { body.focus(); return; }
+  if (sel.isCollapsed) { showToast("Select some text to highlight"); return; }
+  const clearing = selectionIsHighlighted(body);
+  const value = clearing ? "transparent" : HIGHLIGHT_COLOR;
+  // hiliteColor is the inline-run version; backColor is the fallback where the
+  // former isn't supported (old WebKit).
+  if (!document.execCommand("hiliteColor", false, value)) document.execCommand("backColor", false, value);
+  if (clearing) unwrapClearedHighlights(body);
+  saveNoteBody(body);
+}
 
 /* find the nearest ancestor of a given tag from the caret, within the note editor */
 function enclosingTag(tag) {
@@ -3662,6 +3897,7 @@ document.addEventListener("input", e => {
       item.title = el.value;
       item.updatedAt = new Date().toISOString();
       queueSave();
+      scheduleAutoGroup(item);
       const listTitle = document.querySelector(`.entry-item[data-idx="${selectedEntryIndex}"] .entry-item-title`);
       if (listTitle) {
         listTitle.textContent = item.title || "Untitled";
@@ -3672,12 +3908,12 @@ document.addEventListener("input", e => {
   if (el.dataset.role === "entry-body") {
     if (e.inputType === "insertText" && (e.data === " " || e.data === " ")) maybeBulletAutoformat(el);
     const item = personalItems[selectedEntryIndex];
-    if (item) { item.body = el.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); }
+    if (item) { item.body = el.innerHTML; item.updatedAt = new Date().toISOString(); queueSave(); scheduleAutoGroup(item); }
   }
   if (el.dataset.role === "entry-group") {
     // save while typing; the sidebar re-groups on change (blur/enter) to avoid jumpiness
     const item = personalItems[selectedEntryIndex];
-    if (item) { item.group = el.value; item.updatedAt = new Date().toISOString(); queueSave(); }
+    if (item) { item.group = el.value; item.groupManual = true; item.updatedAt = new Date().toISOString(); queueSave(); }
   }
 });
 
@@ -3708,7 +3944,7 @@ document.addEventListener("change", e => {
   }
   if (el.dataset.role === "entry-group") {
     const item = personalItems[selectedEntryIndex];
-    if (item) { item.group = el.value.trim(); queueSave(); renderNoteGroupsNav(); renderEntriesList(); }
+    if (item) { item.group = el.value.trim(); item.groupManual = true; queueSave(); renderNoteGroupsNav(); renderEntriesList(); }
   }
   if (el.id === "newtask-project") {
     const isNew = el.value === "__new__";
@@ -3738,6 +3974,14 @@ document.addEventListener("keydown", e => {
   const el = e.target;
   // Cmd/Ctrl+K opens global search from anywhere; "/" opens it when not typing in a field
   if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); openSearch(); return; }
+  // Cmd/Ctrl+N starts a new task / note / message for whichever screen is open
+  if ((e.key === "n" || e.key === "N") && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+    e.preventDefault(); startNewForCurrentView(); return;
+  }
+  // Cmd/Ctrl+Shift+H toggles the highlighter in a Long Note
+  if ((e.key === "h" || e.key === "H") && (e.metaKey || e.ctrlKey) && e.shiftKey && el && el.dataset && el.dataset.role === "entry-body") {
+    e.preventDefault(); toggleHighlight(); return;
+  }
   if (e.key === "/" && !(el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)))) {
     e.preventDefault(); openSearch(); return;
   }
@@ -3767,6 +4011,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && deleteMode) cancelDeleteMode();
   if (e.key === "Escape" && document.getElementById("picker-overlay").classList.contains("open")) closePicker();
   if (e.key === "Escape" && document.getElementById("newtask-overlay").classList.contains("open")) closeNewTaskDialog();
+  if (e.key === "Escape" && document.getElementById("autogroup-overlay").classList.contains("open")) closeAutoGroupRules();
   if (e.key === "Escape" && document.getElementById("image-lightbox").classList.contains("open")) {
     document.getElementById("image-lightbox").classList.remove("open");
     document.getElementById("lightbox-img").src = "";
@@ -3777,11 +4022,21 @@ document.addEventListener("keydown", e => {
 document.addEventListener("focusout", e => {
   if (e.target.id === "edit-input" && editingTaskKey) saveTaskEdit(e.target);
   if (e.target.id === "ptodo-edit-input" && editingPtodoId !== null) savePtodoEdit(e.target);
+  const role = e.target.dataset && e.target.dataset.role;
+  if ((role === "entry-title" || role === "entry-body") && autoGroupRefreshPending) {
+    // wait a tick: if focus is just moving to the group box or toolbar, the pane must stay put
+    setTimeout(() => { if (!isTypingInEntryDetail(document.getElementById("entry-detail"))) flushAutoGroupRefresh(); }, 0);
+  }
 });
 
 document.getElementById("quick-add-form").addEventListener("submit", e => {
   e.preventDefault();
   addInboxTask();
+});
+
+document.getElementById("autogroup-form").addEventListener("submit", e => {
+  e.preventDefault();
+  saveAutoGroupRules();
 });
 
 /* ---------- drag & drop files onto a project ---------- */
@@ -3869,6 +4124,14 @@ async function init() {
   let addedIds = false;
   personalItems.forEach(n => { if (n && !n.id) { n.id = legacyNoteId(n); addedIds = true; } });
   if (addedIds) queueSave();
+  // first run on this browser: file the ungrouped notes that already match a rule
+  let backfilled = false;
+  try { backfilled = localStorage.getItem(AUTO_GROUP_BACKFILL_KEY) === "1"; } catch (e) {}
+  if (!backfilled && remoteLoaded) {
+    const n = autoGroupAllNotes();
+    try { localStorage.setItem(AUTO_GROUP_BACKFILL_KEY, "1"); } catch (e) {}
+    if (n) showToast(`Filed ${n} note${n === 1 ? "" : "s"} into groups`);
+  }
   refreshFilesCount();
   // ?view=reminders is what a tapped push notification opens
   const params = new URLSearchParams(location.search);
@@ -4395,6 +4658,7 @@ async function applyAssistantActions(actions) {
         const title = String(inp.title || "").trim() || "Untitled";
         const now = new Date().toISOString();
         const n = { id: uid("n"), title, body: markdownToNoteHtml(inp.body), group: String(inp.group || "").trim(), archived: false, pinned: false, createdAt: now, updatedAt: now };
+        maybeAutoGroup(n);
         personalItems.unshift(n); touchedState = true;
         out.push({ ok: true, label: `New long note: ${title}${n.group ? " · " + n.group : ""}`, open: { action: "open-note", id: n.id } });
       } else if (name === "append_to_note") {
@@ -4644,23 +4908,28 @@ function wireAuth() {
 //
 // It also has to outlive a reload. The URL no longer carries the flag by then
 // (replaceState took it), and a reload is the prime suspect for the note
-// closing — so the flag is remembered until ?debug=off turns it back off.
+// closing — so the flag is remembered in sessionStorage: it survives a reload
+// of this tab and dies with the tab. (An earlier build kept it in localStorage,
+// which made it stick to the browser for good and kept the diagnostics running
+// long after anyone wanted them.) ?debug=off turns it off early.
 const NOTE_DEBUG_ON_KEY = "brillhq.noteDebugOn";
 const NOTE_DEBUG = (() => {
   const onUrl = /[?&]debug=notes(\b|$)/.test(location.search);
   const offUrl = /[?&]debug=off(\b|$)/.test(location.search);
+  try { localStorage.removeItem(NOTE_DEBUG_ON_KEY); } catch (e) { /* left over from the old build */ }
   try {
-    if (offUrl) { localStorage.removeItem(NOTE_DEBUG_ON_KEY); return false; }
-    if (onUrl) localStorage.setItem(NOTE_DEBUG_ON_KEY, "1");
-    return onUrl || localStorage.getItem(NOTE_DEBUG_ON_KEY) === "1";
+    if (offUrl) { sessionStorage.removeItem(NOTE_DEBUG_ON_KEY); return false; }
+    if (onUrl) sessionStorage.setItem(NOTE_DEBUG_ON_KEY, "1");
+    return onUrl || sessionStorage.getItem(NOTE_DEBUG_ON_KEY) === "1";
   } catch (e) { return onUrl; }
 })();
 
 /* Diagnostics for "the note box closes while I'm typing". Dormant unless the
    URL carries ?debug=notes, so it costs nothing in normal use. Records every
    structural rebuild of the note pane and every time the editor loses focus,
-   each with the stack that caused it, and keeps the last 50 in
-   window.__noteDebug for copy/paste. */
+   each with the stack that caused it, and keeps the last 80 in
+   window.__noteDebug for copy/paste. Console only — no toasts, so it can't
+   get in the way of the typing it is watching. */
 const NOTE_DEBUG_KEY = "brillhq.noteDebug";
 
 // Kept outside installNoteDebug so the auth handler can record the reload that
@@ -4693,7 +4962,6 @@ function installNoteDebug() {
         if (m.type !== "childList" || (!m.addedNodes.length && !m.removedNodes.length)) continue;
         const item = personalItems[selectedEntryIndex] || {};
         record("note pane rebuilt", { selectedEntryIndex, noteId: item.id || null, noteTitle: item.title || null });
-        showToast("note-debug: pane rebuilt \u2014 see console");
         break;
       }
     }).observe(detail, { childList: true });
@@ -4703,7 +4971,6 @@ function installNoteDebug() {
     if (!el || !el.dataset || el.dataset.role !== "entry-body") return;
     const to = e.relatedTarget;
     record("editor lost focus", { movedTo: (to && (to.dataset && to.dataset.role || to.id || to.tagName)) || "nothing" });
-    showToast("note-debug: editor lost focus \u2014 see console");
   }, true);
   window.__noteDebugClear = () => { try { localStorage.removeItem(NOTE_DEBUG_KEY); } catch (e) {} log.length = 0; console.log("[note-debug] cleared"); };
   console.log("[note-debug] watching the note pane (" + log.length + " event(s) carried over). Reproduce the problem, then run:\n  copy(JSON.stringify(window.__noteDebug, null, 2))\nStart clean with: __noteDebugClear()  |  turn off with ?debug=off");
