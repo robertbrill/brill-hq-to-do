@@ -70,6 +70,16 @@ the caller's Supabase access token before returning anything. The old public
   add the app to the Home Screen first. Save a mobile number under **Get
   reminders by text** to have them texted too (Twilio).
 - **Tasks** can be sorted newest / oldest by date created, or grouped by section.
+- **Long Notes** have a text highlighter (the yellow **H** in the toolbar, or
+  ⌘⇧H) and **auto-grouping**: an ungrouped note is filed under a group as soon
+  as its title or text mentions one of that group's keywords. Rules live under
+  **⚙ Auto-group rules** in the sidebar (defaults: "Predictable Profits" for
+  *predictable profits* / *ppai*, "Client Calls" for *client call*); every
+  existing group name also counts as a keyword for itself.
+- **⌘N / Ctrl+N** starts a new item on any screen: a task on Tasks, a task in
+  the open project on Projects, a long note on Long Notes, a message on
+  Assistant. (Chrome and Safari keep ⌘N for "New Window" and don't hand it to
+  the page, so Ctrl+N is the one that always works in a browser tab.)
 
 Setup (env vars, the two new tables, VAPID keys) is in
 [`supabase/MIGRATION.md`](supabase/MIGRATION.md#assistant--reminders-setup).
