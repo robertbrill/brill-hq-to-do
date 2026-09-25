@@ -416,6 +416,11 @@
     line-height: 1.5;
   }
   .pill.clickable { cursor: pointer; border: none; font: inherit; font-size: 12px; font-weight: 500; }
+  select.status-select {
+    appearance: none; -webkit-appearance: none;
+    padding: 1px 8px; line-height: 1.5; flex-shrink: 0;
+  }
+  select.status-select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
   .pill-gray   { background: var(--pill-gray-bg);   color: var(--pill-gray-tx); }
   .pill-green  { background: var(--pill-green-bg);  color: var(--pill-green-tx); }
   .pill-yellow { background: var(--pill-yellow-bg); color: var(--pill-yellow-tx); }
@@ -1259,7 +1264,8 @@
     /* let task text use the full width; pill + buttons wrap to a second line */
     .task-row, .ptodo-row { flex-wrap: wrap; row-gap: 2px; }
     .task-row .task-body, .ptodo-row .task-body { flex: 1 1 calc(100% - 26px); }
-    .ptodo-row .pill.clickable { margin-left: 26px; }
+    .ptodo-row .pill.clickable, .task-row .status-select { margin-left: 26px; }
+    .ptodo-row .status-select + .pill.clickable { margin-left: 0; }
     .task-row .task-actions, .ptodo-row .task-actions { margin-left: auto; }
     .note-preview { max-width: 160px; }
     /* aggregate Files view: drop the table grid, stack each file as a card */
@@ -1435,6 +1441,8 @@
 
     <div class="controls-row">
       <button class="tab current" data-action="filter" data-filter="active">Active</button>
+      <button class="tab" data-action="filter" data-filter="in_progress">In progress</button>
+      <button class="tab" data-action="filter" data-filter="waiting">Waiting</button>
       <button class="tab" data-action="filter" data-filter="completed">Completed</button>
       <button class="tab" data-action="filter" data-filter="all">All</button>
       <button class="tab" data-action="filter" data-filter="archived">Archived</button>
@@ -1618,8 +1626,17 @@ const PRIORITY_CONFIG = {
 const URGENCY_PILL = { low: "pill-gray", medium: "pill-yellow", high: "pill-red" };
 const URGENCY_NEXT = { low: "medium", medium: "high", high: "low" };
 const STATUS_PILL = { Active: "pill-green", Paused: "pill-yellow", Done: "pill-gray" };
+// Task status (Tasks view + project to-dos). "done" is the checkbox itself;
+// the other three are stored alongside it, so unticking restores the old one.
+const TASK_STATUSES = [
+  { id: "todo",        label: "To do",       pill: "pill-gray" },
+  { id: "in_progress", label: "In progress", pill: "pill-blue" },
+  { id: "waiting",     label: "Waiting",     pill: "pill-purple" },
+  { id: "done",        label: "Done",        pill: "pill-green" }
+];
 
 let completed = {};
+let statuses = {};   // task key -> "in_progress" | "waiting" (absent = to do)
 let edits = {};
 let notes = {};
 let deleted = {};
@@ -1630,7 +1647,7 @@ let personalItems = [];
 let selectedEntryIndex = 0;
 
 let view = "tasks";            // tasks | projects | detail
-let taskFilter = "active";     // active | completed | all
+let taskFilter = "active";     // active | in_progress | waiting | completed | all | archived
 let taskSort = localStorage.getItem("v2-task-sort") || "newest";   // newest | oldest | section
 let searchQuery = "";
 let projectSearchQuery = "";
@@ -1744,6 +1761,7 @@ function normalizeTodo(t) {
     id: String(t.id || uid("pt")),
     text,
     completed: Boolean(t.completed),
+    status: normalizeTaskStatus(t.status),
     urgency: normalizeUrgency(t.urgency),
     createdAt: t.createdAt || t.added || "",
     notes: typeof t.notes === "string" ? t.notes : ""
@@ -1781,6 +1799,7 @@ async function loadRemoteState() {
   try {
     const data = await BrillDB.loadAll();
     completed = data.completed;
+    statuses = data.statuses || {};
     edits = data.edits;
     notes = data.notes;
     deleted = data.deleted;
@@ -1797,7 +1816,7 @@ async function loadRemoteState() {
 
 // the object the app persists; also the source of the sync signature
 function saveStateObj() {
-  return { completed, edits, notes, deleted, archived, projectItems: projects, personalItems };
+  return { completed, statuses, edits, notes, deleted, archived, projectItems: projects, personalItems };
 }
 
 function savePayload() {
@@ -1807,7 +1826,8 @@ function savePayload() {
 // canonical signature of a loadAll() result, comparable to savePayload()
 function serverPayloadOf(data) {
   return JSON.stringify({
-    completed: data.completed || {}, edits: data.edits || {}, notes: data.notes || {}, deleted: data.deleted || {},
+    completed: data.completed || {}, statuses: data.statuses || {},
+    edits: data.edits || {}, notes: data.notes || {}, deleted: data.deleted || {},
     archived: data.archived || {},
     projectItems: Array.isArray(data.projectItems) ? data.projectItems : [],
     personalItems: Array.isArray(data.personalItems) ? data.personalItems : [],
@@ -1850,6 +1870,7 @@ async function maybeSyncState() {
     if (incoming === lastServerPayload) return;   // DB hasn't changed since we last saw it
     // another device changed the data — adopt it
     completed = data.completed;
+    statuses = data.statuses || {};
     edits = data.edits;
     notes = data.notes;
     deleted = data.deleted;
@@ -2062,6 +2083,7 @@ function taskRowHtml(section, idx, showSection) {
   return `<div class="task-row ${isDone ? "done" : ""}">
     <div class="checkbox ${isDone ? "checked" : ""}" data-action="toggle-task" data-key="${escHtml(key)}"></div>
     <div class="task-body">${body}</div>
+    ${archived[key] ? "" : statusSelectHtml(taskStatusOf(key), `data-role="task-status" data-key="${escHtml(key)}"`)}
     <div class="task-actions">
       ${archived[key]
         ? `<button class="icon-btn" data-action="archive-task" data-key="${escHtml(key)}">&#8617; Restore</button>`
@@ -2134,6 +2156,7 @@ function renderTasksInner() {
         const isDone = !!completed[key];
         if (taskFilter === "active" && isDone) return;
         if (taskFilter === "completed" && !isDone) return;
+        if ((taskFilter === "in_progress" || taskFilter === "waiting") && taskStatusOf(key) !== taskFilter) return;
       }
       const text = (edits[key] || item || "").toLowerCase();
       const note = (notes[key] || "").toLowerCase();
@@ -2173,6 +2196,8 @@ function renderTasksInner() {
   if (!shown) {
     html = `<div class="empty-note">${q ? "No tasks match your search." :
       taskFilter === "completed" ? "Nothing completed yet." :
+      taskFilter === "in_progress" ? "Nothing in progress." :
+      taskFilter === "waiting" ? "Nothing waiting." :
       taskFilter === "archived" ? "No archived tasks." : "All clear &mdash; no open tasks. &#127881;"}</div>`;
   }
   container.innerHTML = (deleteMode === "tasks" ? deleteBarHtml() : "") + html;
@@ -2355,6 +2380,7 @@ function ptodoRowHtml(p, t) {
   return `<div class="ptodo-row ${t.completed ? "done" : ""}">
     <div class="checkbox ${t.completed ? "checked" : ""}" data-action="toggle-ptodo" data-id="${escHtml(t.id)}"></div>
     <div class="task-body">${body}</div>
+    ${statusSelectHtml(t.completed ? "done" : t.status, `data-role="ptodo-status" data-id="${escHtml(t.id)}"`)}
     <button class="pill clickable ${URGENCY_PILL[t.urgency]}" title="Click to change urgency"
       data-action="cycle-urgency" data-id="${escHtml(t.id)}">${t.urgency[0].toUpperCase() + t.urgency.slice(1)}</button>
     <div class="task-actions">
@@ -3143,6 +3169,45 @@ function render() {
   if (view === "files") renderFilesView();
   if (view === "assistant") renderAssistant();
   if (view === "reminders") renderReminders();
+}
+
+/* ---------- task status ---------- */
+
+function normalizeTaskStatus(s) {
+  return s === "in_progress" || s === "waiting" ? s : "todo";
+}
+
+function taskStatusOf(key) {
+  return completed[key] ? "done" : normalizeTaskStatus(statuses[key]);
+}
+
+function statusSelectHtml(current, attrs) {
+  const cur = TASK_STATUSES.find(s => s.id === current) || TASK_STATUSES[0];
+  return `<select class="pill clickable status-select ${cur.pill}" title="Status" ${attrs}>
+    ${TASK_STATUSES.map(s => `<option value="${s.id}"${s.id === cur.id ? " selected" : ""}>${s.label}</option>`).join("")}
+  </select>`;
+}
+
+function setTaskStatus(key, value) {
+  if (value === "done") completed[key] = true;
+  else {
+    delete completed[key];
+    if (value === "todo") delete statuses[key];
+    else statuses[key] = normalizeTaskStatus(value);
+  }
+  queueSave();
+  render();
+}
+
+function setPtodoStatus(todoId, value) {
+  const p = findProject(activeProjectId);
+  const t = p && p.todos.find(t => String(t.id) === String(todoId));
+  if (!t) return;
+  if (value === "done") t.completed = true;
+  else { t.completed = false; t.status = normalizeTaskStatus(value); }
+  touchProject(p);
+  queueSave();
+  render();
 }
 
 /* ---------- actions: tasks ---------- */
@@ -3952,6 +4017,8 @@ document.addEventListener("change", e => {
     projInput.style.display = isNew ? "" : "none";
     if (isNew) projInput.focus();
   }
+  if (el.dataset.role === "task-status") setTaskStatus(el.dataset.key, el.value);
+  if (el.dataset.role === "ptodo-status") setPtodoStatus(el.dataset.id, el.value);
   if (el.id === "detail-status") {
     const p = findProject(activeProjectId);
     if (p) { p.status = el.value; touchProject(p); queueSave(); renderProjectDetail(); renderProjectsSidebar(); renderNav(); }
