@@ -74,7 +74,13 @@
   // per-field diffing, and it matches the old "write the whole blob" model.
   async function reconcile(table, rows, idCol, conflict) {
     if (rows.length) {
-      const { error } = await client.from(table).upsert(rows, { onConflict: conflict || idCol });
+      let { error } = await client.from(table).upsert(rows, { onConflict: conflict || idCol });
+      // A database that hasn't had schema.sql re-run yet has no `status`
+      // column. Save everything else rather than failing the whole save.
+      if (error && /'status' column|column .*status/i.test(error.message || "") && "status" in rows[0]) {
+        rows = rows.map(({ status, ...rest }) => rest);
+        ({ error } = await client.from(table).upsert(rows, { onConflict: conflict || idCol }));
+      }
       if (error) throw error;
     }
     const keep = new Set(rows.map((r) => String(r[idCol])));
@@ -169,7 +175,7 @@
       const todosByProject = {};
       (todoRes.data || []).forEach((t) => {
         (todosByProject[t.project_id] = todosByProject[t.project_id] || []).push({
-          id: t.id, text: t.body || "", completed: !!t.completed,
+          id: t.id, text: t.body || "", completed: !!t.completed, status: t.status || "todo",
           urgency: t.urgency || "medium", createdAt: toTs(t.created_at) || "", notes: t.notes || "",
         });
       });
@@ -188,16 +194,17 @@
         createdAt: toTs(n.created_at) || "", updatedAt: toTs(n.updated_at) || "",
       }));
 
-      const completed = {}, edits = {}, notes = {}, deleted = {}, archived = {};
+      const completed = {}, statuses = {}, edits = {}, notes = {}, deleted = {}, archived = {};
       (ovrRes.data || []).forEach((o) => {
         if (o.completed) completed[o.task_key] = true;
+        if (o.status && o.status !== "todo") statuses[o.task_key] = o.status;
         if (o.edited_text) edits[o.task_key] = o.edited_text;
         if (o.note) notes[o.task_key] = o.note;
         if (o.deleted) deleted[o.task_key] = true;
         if (o.archived) archived[o.task_key] = true;
       });
 
-      return { completed, edits, notes, deleted, archived, projectItems, personalItems };
+      return { completed, statuses, edits, notes, deleted, archived, projectItems, personalItems };
     },
 
     // Full normalized sync of the in-memory state. Order matters: projects
@@ -223,7 +230,7 @@
       const todoRows = [];
       projects.forEach((p) => (p.todos || []).forEach((t, i) => todoRows.push({
         id: String(t.id), user_id: uid, project_id: String(p.id), body: t.text || "",
-        completed: !!t.completed, urgency: t.urgency || "medium", notes: t.notes || "", sort_order: i,
+        completed: !!t.completed, status: t.status || "todo", urgency: t.urgency || "medium", notes: t.notes || "", sort_order: i,
         ...(toTs(t.createdAt) ? { created_at: toTs(t.createdAt) } : {}),
       })));
       await reconcile("project_todos", todoRows, "id");
@@ -236,13 +243,15 @@
       }));
 
       const keys = new Set([
-        ...Object.keys(state.completed || {}), ...Object.keys(state.edits || {}),
+        ...Object.keys(state.completed || {}), ...Object.keys(state.statuses || {}),
+        ...Object.keys(state.edits || {}),
         ...Object.keys(state.notes || {}), ...Object.keys(state.deleted || {}),
         ...Object.keys(state.archived || {}),
       ]);
       const ovrRows = [...keys].map((k) => ({
         user_id: uid, task_key: k,
         completed: !!(state.completed || {})[k],
+        status: (state.statuses || {})[k] || null,
         edited_text: (state.edits || {})[k] || null,
         note: (state.notes || {})[k] || null,
         deleted: !!(state.deleted || {})[k],

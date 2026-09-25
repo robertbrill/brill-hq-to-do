@@ -97,6 +97,10 @@ create table if not exists task_overrides (
 );
 alter table task_overrides add column if not exists archived boolean default false;
 
+-- Task status (To do / In progress / Waiting; "Done" is the completed flag):
+alter table task_overrides add column if not exists status text;                 -- null = to do | in_progress | waiting
+alter table project_todos  add column if not exists status text default 'todo';  -- todo | in_progress | waiting
+
 -- ============ ROW LEVEL SECURITY ============
 alter table projects       enable row level security;
 alter table project_todos  enable row level security;
