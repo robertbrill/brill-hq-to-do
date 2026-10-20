@@ -1049,6 +1049,30 @@
   }
   .modal-body textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
 
+  /* ============ Share dialog ============ */
+  .share-card { max-width: 480px; max-height: 80vh; }
+  .share-card .modal-list { padding: 0 12px; flex: 0 1 auto; }
+  .share-card.all-links .modal-list { flex: 1 1 auto; }
+  .share-card.all-links .share-new { display: none; }
+  .share-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0 0 8px; }
+  .share-row-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; overflow-wrap: anywhere; }
+  .share-link { display: flex; gap: 6px; }
+  .share-link input {
+    flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 6px 8px; border: 1px solid var(--border-strong);
+    border-radius: 6px; background: var(--sidebar); color: var(--text); outline: none;
+  }
+  .share-row-meta { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .share-row-meta .spacer { flex: 1; }
+  .share-row-meta .icon-btn.danger { color: #d64545; }
+  .share-empty { font-size: 13px; color: var(--faint); padding: 4px 6px 12px; }
+  .share-new { border-top: 1px solid var(--border); padding-top: 12px; }
+  .share-new-title { font-size: 13px; font-weight: 600; }
+  .share-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .share-fields > div { display: flex; flex-direction: column; gap: 8px; }
+  @media (max-width: 480px) { .share-fields { grid-template-columns: 1fr; } }
+  .share-hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .share-new .new-btn.primary { align-self: flex-start; }
+
   /* ============ Toast ============ */
   .toast {
     position: fixed;
@@ -1389,6 +1413,9 @@
   <button class="nav-item" id="nav-reminders" data-action="nav" data-view="reminders">
     <span class="nav-icon">&#9200;</span> Reminders <span class="nav-count" id="nav-reminders-count"></span>
   </button>
+  <button class="nav-item" id="nav-shares" data-action="share-all">
+    <span class="nav-icon">&#128279;</span> Shared links
+  </button>
   <div class="sidebar-footer" id="sidebar-stats"></div>
   <button class="signout-btn" id="signout-btn" data-action="sign-out">&#8617; Sign out</button>
 </aside>
@@ -1574,6 +1601,41 @@
         <button class="new-btn primary" type="submit">Save &amp; file notes</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ============ Share (private links) ============ -->
+<div class="modal-overlay" id="share-overlay">
+  <div class="modal-card share-card">
+    <div class="modal-head">
+      <span id="share-head">Share</span>
+      <div class="modal-sub" id="share-sub"></div>
+    </div>
+    <div class="modal-list" id="share-list"></div>
+    <form class="modal-body share-new" id="share-form">
+      <div class="share-new-title">New private link</div>
+      <div class="share-fields">
+        <div>
+          <label for="share-passcode">Passcode (optional)</label>
+          <input type="text" id="share-passcode" placeholder="None" autocomplete="off" spellcheck="false" maxlength="64">
+        </div>
+        <div>
+          <label for="share-expiry">Link works for</label>
+          <select id="share-expiry">
+            <option value="1">1 day</option>
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+            <option value="0">Until I turn it off</option>
+          </select>
+        </div>
+      </div>
+      <div class="share-hint">They get a read-only copy as of now &mdash; no login, and nothing else in your account. Edit later? Hit <b>Update copy</b>.</div>
+      <button class="new-btn primary" type="submit" id="share-create">Create link</button>
+    </form>
+    <div class="modal-foot">
+      <button class="new-btn" type="button" data-action="share-close">Done</button>
+    </div>
   </div>
 </div>
 
@@ -2090,6 +2152,7 @@ function taskRowHtml(section, idx, showSection) {
         : `<button class="icon-btn" data-action="toggle-notes" data-key="${escHtml(key)}">${notesOpen ? "Hide note" : (hasNotes ? "Note" : "+ Note")}</button>
       <button class="icon-btn" data-action="assign-project" data-key="${escHtml(key)}">&rarr; Project</button>
       <button class="icon-btn" data-action="edit-task" data-key="${escHtml(key)}">Edit</button>
+      <button class="icon-btn" data-action="share-open" data-kind="task" data-ref="${escHtml(key)}" title="Share a private link">Share</button>
       <button class="icon-btn" data-action="archive-task" data-key="${escHtml(key)}">Archive</button>`}
     </div>
   </div>`;
@@ -2386,6 +2449,7 @@ function ptodoRowHtml(p, t) {
     <div class="task-actions">
       <button class="icon-btn" data-action="toggle-ptodo-notes" data-id="${escHtml(t.id)}">${notesOpen ? "Hide" : (hasNotes ? "Note" : "+ Note")}</button>
       <button class="icon-btn" data-action="edit-ptodo" data-id="${escHtml(t.id)}">Edit</button>
+      <button class="icon-btn" data-action="share-open" data-kind="ptodo" data-ref="${escHtml(t.id)}" title="Share a private link">Share</button>
     </div>
   </div>`;
 }
@@ -2414,6 +2478,7 @@ function renderProjectDetail() {
       <div class="menu-wrap">
         <button class="icon-btn" data-action="toggle-menu" title="More options">&#8943;</button>
         <div class="menu">
+          <button data-action="share-open" data-kind="project" data-ref="${escHtml(p.id)}">&#128279; Share project&hellip;</button>
           <button data-action="archive-project" data-id="${escHtml(p.id)}">${p.archived ? "&#8617; Unarchive project" : "&#128230; Archive project"}</button>
           <button class="danger" data-action="start-delete" data-scope="ptodos">Delete to-dos&hellip;</button>
         </div>
@@ -2592,6 +2657,7 @@ function renderEntryDetail() {
         <button class="icon-btn" data-action="checklist">&#9745; Check</button>
         <button class="icon-btn" data-action="fmt" data-cmd="removeFormat">Clear</button>
         <div class="controls-spacer"></div>
+        <button class="icon-btn" data-action="share-open" data-kind="note" title="Share a private link">&#128279; Share</button>
         <div class="menu-wrap">
           <button class="icon-btn" data-action="toggle-menu" title="More options">&#8943;</button>
           <div class="menu">
@@ -2745,6 +2811,188 @@ function saveAutoGroupRules() {
   const n = autoGroupAllNotes();
   showToast(n ? `Rules saved · filed ${n} note${n === 1 ? "" : "s"}` : "Rules saved");
   if (view === "personal") renderPersonal();
+}
+
+/* ---------- private share links ----------
+   "Share" on a note, task, to-do or project makes a private link to a COPY of
+   just that item (api/share.js). The link is a long random token: it isn't
+   listed, searchable or guessable, recipients need no login, and it shows
+   nothing else in the account. A passcode and an expiry are optional; turning
+   a link off deletes the copy. Edits made after sharing reach the link only
+   when "Update copy" is pressed, so nothing goes out that wasn't meant to. */
+let shareCtx = null;       // { kind, ref, title } for one item, or null for the "all links" list
+let shareRows = null;      // the account's links (null = not loaded yet)
+let shareBusy = false;
+
+const SHARE_KIND_LABEL = { note: "Note", task: "Task", ptodo: "To-do", project: "Project" };
+
+function shareUrl(token) { return location.origin + "/s/" + token; }
+
+function findTaskByKey(key) {
+  const cut = String(key || "").lastIndexOf("::");
+  if (cut < 0) return null;
+  const sectionId = key.slice(0, cut), idx = Number(key.slice(cut + 2));
+  const section = getAllSections().find(sec => sec.id === sectionId);
+  if (!section || section.items[idx] === undefined || deleted[key]) return null;
+  return { section, idx };
+}
+
+function todoShareCopy(t) {
+  return { text: t.text || "", status: t.completed ? "done" : normalizeTaskStatus(t.status), done: !!t.completed,
+           urgency: normalizeUrgency(t.urgency), notes: t.notes || "" };
+}
+
+// -> { title, content } for the item as it is right now, or null if it's gone
+function buildShareContent(kind, ref) {
+  if (kind === "note") {
+    const item = personalItems.find(n => n && n.id === ref);
+    if (!item) return null;
+    return { title: item.title || "Untitled", content: { html: item.body || "", group: item.group || "" } };
+  }
+  if (kind === "task") {
+    const found = findTaskByKey(ref);
+    if (!found) return null;
+    const text = edits[ref] || found.section.items[found.idx];
+    return { title: String(text || "Untitled task"), content: {
+      status: taskStatusOf(ref), done: !!completed[ref], notes: notes[ref] || "", section: found.section.title || "" } };
+  }
+  if (kind === "ptodo") {
+    const p = projects.find(pr => pr.todos.some(t => String(t.id) === String(ref)));
+    if (!p) return null;
+    const t = p.todos.find(x => String(x.id) === String(ref));
+    const copy = todoShareCopy(t);
+    return { title: copy.text || "Untitled to-do", content: { ...copy, project: p.name || "" } };
+  }
+  if (kind === "project") {
+    const p = findProject(ref);
+    if (!p) return null;
+    return { title: p.name || "Untitled project", content: {
+      status: p.status || "Active", due: p.due || "", notes: p.notes || "", todos: p.todos.map(todoShareCopy) } };
+  }
+  return null;
+}
+
+async function openShareDialog(kind, ref) {
+  if (kind === "note" && !ref) {
+    const item = personalItems[selectedEntryIndex];
+    if (!item) return;
+    if (!item.id) { item.id = uid("n"); queueSave(); }
+    ref = item.id;
+  }
+  if (kind) {
+    const built = buildShareContent(kind, ref);
+    if (!built) { showToast("Couldn't find that item"); return; }
+    shareCtx = { kind, ref, title: built.title };
+  } else {
+    shareCtx = null;
+  }
+  document.getElementById("share-passcode").value = "";
+  document.getElementById("share-expiry").value = "30";
+  document.getElementById("share-overlay").classList.add("open");
+  renderShareDialog();
+  try { shareRows = await BrillDB.listShares(); }
+  catch (e) { shareRows = shareRows || []; showToast("Couldn't load your links: " + e.message); }
+  renderShareDialog();
+}
+
+function closeShareDialog() {
+  document.getElementById("share-overlay").classList.remove("open");
+  shareCtx = null;
+}
+
+function shareRowHtml(r) {
+  const expired = r.expires_at && Date.parse(r.expires_at) <= Date.now();
+  const bits = [];
+  if (!shareCtx) bits.push(`<span>${escHtml(SHARE_KIND_LABEL[r.kind] || r.kind)}</span>`);
+  bits.push(r.has_passcode ? "<span>&#128274; Passcode</span>" : "<span>No passcode</span>");
+  bits.push(expired ? `<span style="color:#d64545">Expired</span>`
+    : r.expires_at ? `<span>Until ${escHtml(formatEntryDate(r.expires_at))}</span>` : "<span>No expiry</span>");
+  bits.push(`<span>${r.views || 0} view${r.views === 1 ? "" : "s"}</span>`);
+  bits.push(`<span>Copy from ${escHtml(formatEntryDate(r.updated_at || r.created_at))}</span>`);
+  const canRefresh = !expired && !!buildShareContent(r.kind, r.item_ref);
+  return `<div class="share-row">
+    ${shareCtx ? "" : `<div class="share-row-title">${escHtml(r.title || "Untitled")}</div>`}
+    <div class="share-link">
+      <input type="text" readonly value="${escHtml(shareUrl(r.token))}" data-role="share-url" data-token="${escHtml(r.token)}">
+      <button class="new-btn" type="button" data-action="share-copy" data-token="${escHtml(r.token)}">Copy</button>
+    </div>
+    <div class="share-row-meta">
+      ${bits.join("")}
+      <span class="spacer"></span>
+      ${canRefresh ? `<button class="icon-btn" type="button" data-action="share-refresh" data-id="${escHtml(r.id)}" title="Send your latest edits to this link">Update copy</button>` : ""}
+      <button class="icon-btn danger" type="button" data-action="share-delete" data-id="${escHtml(r.id)}">Turn off</button>
+    </div>
+  </div>`;
+}
+
+function renderShareDialog() {
+  const card = document.querySelector("#share-overlay .share-card");
+  card.classList.toggle("all-links", !shareCtx);
+  document.getElementById("share-head").textContent = shareCtx ? `Share “${shareCtx.title}”` : "Shared links";
+  document.getElementById("share-sub").textContent = shareCtx
+    ? "Private link: only people you send it to can open it. It isn't listed or searchable anywhere."
+    : "Every private link you've made. Turn one off and it stops working right away.";
+  const list = document.getElementById("share-list");
+  if (shareRows === null) { list.innerHTML = `<div class="share-empty">Loading&hellip;</div>`; return; }
+  const rows = shareCtx ? shareRows.filter(r => r.kind === shareCtx.kind && r.item_ref === shareCtx.ref) : shareRows;
+  list.innerHTML = rows.length ? rows.map(shareRowHtml).join("")
+    : `<div class="share-empty">${shareCtx ? "Not shared yet." : "You haven't shared anything yet. Use <b>Share</b> on a note, task or project."}</div>`;
+  document.getElementById("share-create").disabled = shareBusy;
+}
+
+async function copyShareLink(token) {
+  const url = shareUrl(token);
+  try { await navigator.clipboard.writeText(url); showToast("Link copied"); return true; }
+  catch (e) {
+    const input = document.querySelector(`[data-role="share-url"][data-token="${CSS.escape(token)}"]`);
+    if (input) { input.focus(); input.select(); if (document.execCommand("copy")) { showToast("Link copied"); return true; } }
+    showToast("Select the link and copy it");
+    return false;
+  }
+}
+
+async function createShareLink() {
+  if (!shareCtx || shareBusy) return;
+  const built = buildShareContent(shareCtx.kind, shareCtx.ref);
+  if (!built) { showToast("Couldn't find that item"); return; }
+  shareBusy = true; renderShareDialog();
+  try {
+    const share = await BrillDB.createShare({
+      kind: shareCtx.kind, itemRef: shareCtx.ref, title: built.title, content: built.content,
+      passcode: document.getElementById("share-passcode").value.trim(),
+      expiresInDays: Number(document.getElementById("share-expiry").value),
+    });
+    shareRows = [share, ...(shareRows || [])];
+    document.getElementById("share-passcode").value = "";
+    shareBusy = false; renderShareDialog();
+    if (!(await copyShareLink(share.token))) return;
+    showToast(share.has_passcode ? "Link copied — send the passcode separately" : "Private link copied");
+  } catch (e) {
+    shareBusy = false; renderShareDialog();
+    showToast(e.message);
+  }
+}
+
+async function refreshShare(id) {
+  const row = (shareRows || []).find(r => r.id === id);
+  const built = row && buildShareContent(row.kind, row.item_ref);
+  if (!built) { showToast("That item no longer exists"); return; }
+  try {
+    const share = await BrillDB.updateShare(id, { title: built.title, content: built.content });
+    shareRows = shareRows.map(r => r.id === id ? share : r);
+    renderShareDialog();
+    showToast("Shared copy updated");
+  } catch (e) { showToast(e.message); }
+}
+
+async function deleteShareLink(id) {
+  if (!confirm("Turn off this link? Anyone who has it won't be able to open it anymore.")) return;
+  try {
+    await BrillDB.deleteShare(id);
+    shareRows = (shareRows || []).filter(r => r.id !== id);
+    renderShareDialog();
+    showToast("Link turned off");
+  } catch (e) { showToast(e.message); }
 }
 
 // first personalItems index whose archived state matches the current view (or -1)
@@ -3713,6 +3961,15 @@ document.addEventListener("click", e => {
   if (a === "toggle-props") { detailPropsOpen = !detailPropsOpen; renderProjectDetail(); }
   if (a === "new-project") openNewTaskDialog();
   if (a === "newtask-cancel") closeNewTaskDialog();
+  if (a === "share-open") {
+    document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    openShareDialog(el.dataset.kind, el.dataset.ref);
+  }
+  if (a === "share-all") { if (isCompact()) setCompactNav(false); openShareDialog(null); }
+  if (a === "share-close") closeShareDialog();
+  if (a === "share-copy") copyShareLink(el.dataset.token);
+  if (a === "share-refresh") refreshShare(el.dataset.id);
+  if (a === "share-delete") deleteShareLink(el.dataset.id);
   if (a === "autogroup-rules") openAutoGroupRules();
   if (a === "autogroup-cancel") closeAutoGroupRules();
   if (a === "autogroup-reset") document.getElementById("autogroup-rules").value = DEFAULT_AUTO_GROUP_RULES;
@@ -4079,6 +4336,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && document.getElementById("picker-overlay").classList.contains("open")) closePicker();
   if (e.key === "Escape" && document.getElementById("newtask-overlay").classList.contains("open")) closeNewTaskDialog();
   if (e.key === "Escape" && document.getElementById("autogroup-overlay").classList.contains("open")) closeAutoGroupRules();
+  if (e.key === "Escape" && document.getElementById("share-overlay").classList.contains("open")) closeShareDialog();
   if (e.key === "Escape" && document.getElementById("image-lightbox").classList.contains("open")) {
     document.getElementById("image-lightbox").classList.remove("open");
     document.getElementById("lightbox-img").src = "";
@@ -4101,6 +4359,10 @@ document.getElementById("quick-add-form").addEventListener("submit", e => {
   addInboxTask();
 });
 
+document.getElementById("share-form").addEventListener("submit", e => {
+  e.preventDefault();
+  createShareLink();
+});
 document.getElementById("autogroup-form").addEventListener("submit", e => {
   e.preventDefault();
   saveAutoGroupRules();

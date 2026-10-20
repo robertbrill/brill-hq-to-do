@@ -164,6 +164,39 @@ task lists are not sent. Chat history is kept only in the browser
 
 ---
 
+## Private share links setup
+
+**Share** (on a long note, a task, a project to-do, or a project's ⋯ menu)
+makes a private link to a read-only copy of that one item, for people who
+don't have a login. **Shared links** in the sidebar lists every link, with
+**Update copy** and **Turn off**.
+
+1. Re-run `supabase/schema.sql` in the SQL Editor. The new part is the
+   `shares` table (owner-only RLS, like everything else).
+2. `SUPABASE_SERVICE_ROLE_KEY` must be set in Vercel (it already is if
+   reminders work). `api/share.js` uses it to look a link up by its token.
+3. Redeploy. `vercel.json` routes `/s/<token>` to `share.html`.
+
+How it stays private:
+
+- The link carries a 192-bit random token. Nothing lists, searches or
+  indexes shares: the table is unreadable with the anon key, and
+  `api/share.js` answers only for an exact token. Pages and API responses
+  are sent with `noindex`, `no-store` and `no-referrer`.
+- A share is a **copy** taken when you share it (or press **Update copy**).
+  It never points into your live tables, so nothing else in the account can be
+  reached through it, and edits you make later stay private until you push
+  them.
+- Optional **passcode** (stored as a scrypt hash; 5 wrong tries pause it for
+  15 minutes) and **expiry** (default 30 days). **Turn off** deletes the copy.
+- Note HTML is rebuilt from an allowlist before it's displayed, and the share
+  page has a strict Content-Security-Policy, so pasted scripts can't run.
+- Anyone who has the link (and the passcode, if set) can open it, so send the
+  passcode by a different channel than the link.
+- Files attached to a note or project are **not** included in the share.
+
+---
+
 ## Local development (optional)
 
 To run `index.html` against Supabase from the Mac without Vercel:
