@@ -208,3 +208,5 @@ alter table shares enable row level security;
 drop policy if exists own_all on shares;
 create policy own_all on shares for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
+-- Belt and braces: the anon role gets no table privileges at all (RLS already denies it).
+revoke all on table shares from anon;
