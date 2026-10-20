@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<title>Shared with you · Brill HQ</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<!-- The page itself holds nothing private: it's the same static file for every
+     link. share-view.js reads the token from the address, asks /api/share for
+     that one item (with the passcode, if it has one) and renders it. Link
+     previews (Slack, iMessage, email scanners) fetch this file without running
+     it, so they see only "Shared with you". -->
+<style>
+  :root {
+    --bg: #ffffff; --card: #ffffff; --text: #37352f; --muted: #787774; --faint: #9b9a97;
+    --border: rgba(0,0,0,0.09); --border-strong: rgba(0,0,0,0.16); --blue: #2383e2; --blue-soft: rgba(35,131,226,0.12);
+    --highlight: #fff2a8; --page: #f7f7f5;
+    --pill-gray-bg: #f1f1ef; --pill-gray-tx: #57564f; --pill-green-bg: #dbeddb; --pill-green-tx: #1c3829;
+    --pill-blue-bg: #d3e5ef; --pill-blue-tx: #183347; --pill-purple-bg: #e8deee; --pill-purple-tx: #412454;
+    --pill-red-bg: #ffe2dd; --pill-red-tx: #5d1715; --pill-yellow-bg: #fdecc8; --pill-yellow-tx: #402c1b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191919; --card: #202020; --text: #e9e9e7; --muted: #a5a5a2; --faint: #7f7f7c;
+      --border: rgba(255,255,255,0.09); --border-strong: rgba(255,255,255,0.18); --page: #191919;
+      --highlight: #6b5a12;
+      --pill-gray-bg: #373737; --pill-gray-tx: #d4d4d1; --pill-green-bg: #24392b; --pill-green-tx: #b6dfc0;
+      --pill-blue-bg: #1f3646; --pill-blue-tx: #b3d4ea; --pill-purple-bg: #3a2c45; --pill-purple-tx: #dac6ea;
+      --pill-red-bg: #4a2522; --pill-red-tx: #f5c2bb; --pill-yellow-bg: #4a3a1f; --pill-yellow-tx: #f2d7a6;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--page); color: var(--text); line-height: 1.55; -webkit-font-smoothing: antialiased;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  .top { display: flex; align-items: center; gap: 10px; padding: 14px 16px; font-size: 13px; color: var(--muted); max-width: 760px; width: 100%; margin: 0 auto; }
+  .top img { width: 22px; height: 22px; border-radius: 5px; }
+  .top .lock { margin-left: auto; font-size: 12px; color: var(--faint); }
+  main { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 0 16px 48px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 28px 28px 32px; }
+  @media (max-width: 600px) { .card { padding: 20px 16px 24px; border-radius: 10px; } }
+  h1 { font-size: 26px; line-height: 1.25; font-weight: 700; margin-bottom: 6px; overflow-wrap: anywhere; }
+  .meta { font-size: 12.5px; color: var(--faint); margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 4px; background: var(--pill-gray-bg); color: var(--pill-gray-tx); }
+  .pill-green { background: var(--pill-green-bg); color: var(--pill-green-tx); }
+  .pill-blue { background: var(--pill-blue-bg); color: var(--pill-blue-tx); }
+  .pill-purple { background: var(--pill-purple-bg); color: var(--pill-purple-tx); }
+  .pill-red { background: var(--pill-red-bg); color: var(--pill-red-tx); }
+  .pill-yellow { background: var(--pill-yellow-bg); color: var(--pill-yellow-tx); }
+
+  .rich { font-size: 16px; line-height: 1.65; overflow-wrap: anywhere; }
+  .rich > * + * { margin-top: 0.6em; }
+  .rich h1, .rich h2, .rich h3 { font-size: 1.2em; margin-top: 1.1em; }
+  .rich a { color: var(--blue); }
+  .rich mark { background: var(--highlight); color: inherit; }
+  .rich ul, .rich ol { padding-left: 24px; }
+  .rich ul.checklist { list-style: none; padding-left: 2px; }
+  .rich ul.checklist li { position: relative; padding-left: 28px; margin: 2px 0; }
+  .rich ul.checklist li::before { content: ""; position: absolute; left: 0; top: 4px; width: 16px; height: 16px; border: 1.5px solid var(--border-strong); border-radius: 4px; }
+  .rich ul.checklist li.checked { color: var(--faint); text-decoration: line-through; }
+  .rich ul.checklist li.checked::before { content: "\2713"; color: #fff; background: var(--blue); border-color: var(--blue); font-size: 12px; line-height: 16px; text-align: center; }
+  .rich blockquote { border-left: 3px solid var(--border-strong); padding-left: 12px; color: var(--muted); }
+  .rich pre, .rich code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+  .rich pre { background: var(--pill-gray-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; }
+  .rich img { max-width: 100%; height: auto; border-radius: 6px; }
+  .rich table { border-collapse: collapse; display: block; overflow-x: auto; }
+  .rich td, .rich th { border: 1px solid var(--border-strong); padding: 4px 8px; }
+  .plain { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15.5px; }
+
+  .label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 22px 0 8px; }
+  .todo { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--border); }
+  .todo:first-of-type { border-top: none; }
+  .box { flex: none; width: 16px; height: 16px; margin-top: 3px; border: 1.5px solid var(--border-strong); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; }
+  .todo.done .box { background: var(--blue); border-color: var(--blue); }
+  .todo.done .todo-text { color: var(--faint); text-decoration: line-through; }
+  .todo-main { flex: 1; min-width: 0; }
+  .todo-text { overflow-wrap: anywhere; }
+  .todo-notes { font-size: 13.5px; color: var(--muted); white-space: pre-wrap; margin-top: 2px; overflow-wrap: anywhere; }
+  .todo .pills { display: flex; gap: 6px; flex-wrap: wrap; flex: none; }
+
+  .center { text-align: center; padding: 56px 16px; }
+  .center h2 { font-size: 18px; margin-bottom: 6px; }
+  .center p { color: var(--muted); font-size: 14px; }
+  form.pass { display: flex; flex-direction: column; gap: 10px; max-width: 300px; margin: 18px auto 0; }
+  form.pass input { font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg); color: var(--text); outline: none; text-align: center; }
+  form.pass input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  form.pass button { font: inherit; font-size: 15px; font-weight: 600; padding: 10px 12px; border: none; border-radius: 8px; background: var(--blue); color: #fff; cursor: pointer; }
+  form.pass button:disabled { opacity: 0.6; cursor: default; }
+  .err { color: #d64545; font-size: 13px; min-height: 18px; }
+  footer { text-align: center; font-size: 12px; color: var(--faint); padding: 0 16px 28px; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <img src="/brill-logo.png" alt="">
+    <span>Brill HQ</span>
+    <span class="lock">&#128274; Private link</span>
+  </div>
+  <main id="app">
+    <div class="card center"><p>Loading&hellip;</p></div>
+  </main>
+  <footer>Shared privately. Please don't forward this link &mdash; anyone who has it can open it.</footer>
+  <script src="/share-view.js"></script>
+</body>
+</html>

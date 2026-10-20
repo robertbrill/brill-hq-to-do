@@ -175,3 +175,38 @@ begin
       'create policy own_all on %I for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());', t);
   end loop;
 end $$;
+
+-- ============ SHARES (private links to one note / task / project) ============
+-- "Share" in the app makes a COPY of one item and a long random link to it.
+-- Nothing here is public: RLS keeps every row owner-only, the anon key can't
+-- read the table at all, and the only way to see a share without signing in
+-- is api/share.js, which looks one row up by its exact token (and passcode,
+-- if set) with the service-role key and returns just that row's copy.
+-- Turning a link off deletes the row, copy and all.
+create table if not exists shares (
+  id              text primary key,
+  user_id         uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  token           text not null unique,      -- the secret in the link (/s/<token>), 192 random bits
+  kind            text not null,             -- note | task | ptodo | project
+  item_ref        text default '',           -- note id / task key / to-do id / project id, to find a share again
+  title           text default '',
+  content         jsonb not null default '{}'::jsonb,   -- the shared copy (see api/share.js)
+  passcode_hash   text,                      -- scrypt "salt:hash" (null = no passcode); set only by api/share.js
+  has_passcode    boolean generated always as (passcode_hash is not null) stored,   -- what the app lists instead of the hash
+  expires_at      timestamptz,               -- null = until turned off
+  views           integer default 0,
+  last_viewed_at  timestamptz,
+  failed_attempts integer default 0,         -- wrong passcodes in a row
+  locked_until    timestamptz,               -- passcode entry paused after too many wrong tries
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+create index if not exists shares_user_idx on shares(user_id);
+create index if not exists shares_item_idx on shares(user_id, kind, item_ref);
+
+alter table shares enable row level security;
+drop policy if exists own_all on shares;
+create policy own_all on shares for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+-- Belt and braces: the anon role gets no table privileges at all (RLS already denies it).
+revoke all on table shares from anon;

@@ -452,6 +452,37 @@
     // The Assistant: { messages:[{role,content}], context:{...} } -> { reply, actions }
     assistant(payload) { return this.callApi("/api/assistant", payload); },
 
+    /* ---------- private share links (api/share.js makes them; RLS lists / deletes them) ---------- */
+
+    // opts: { kind, itemRef, title, content, passcode, expiresInDays } -> share row (owner view)
+    async createShare(opts) {
+      const { share } = await this.callApi("/api/share", { action: "create", ...opts });
+      return share;
+    },
+
+    // patch: { title?, content?, passcode?, clearPasscode?, expiresInDays? } -> share row
+    async updateShare(id, patch) {
+      const { share } = await this.callApi("/api/share", { action: "update", id, ...patch });
+      return share;
+    },
+
+    // every link this account has made, newest first (the passcode hash is never selected)
+    async listShares() {
+      await ensureUser();
+      const { data, error } = await client.from("shares")
+        .select("id, token, kind, item_ref, title, has_passcode, expires_at, views, last_viewed_at, created_at, updated_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+
+    // turning a link off deletes the row, so the shared copy is gone too
+    async deleteShare(id) {
+      await ensureUser();
+      const { error } = await client.from("shares").delete().eq("id", String(id));
+      if (error) throw error;
+    },
+
     /* ---------- reminders ---------- */
 
     _reminderFromRow(r) {

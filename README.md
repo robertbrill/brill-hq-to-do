@@ -40,6 +40,7 @@ same; only the storage layer changed.
 | `supabase/migrate.mjs` | One-time importer: Mac JSON/files → Supabase. |
 | `api/config.js` | Vercel function that serves `/config.js` from env vars. |
 | `api/assistant.js` | Vercel function behind the **Assistant** view: Claude turns what you type (or dictate) into tasks / projects / long notes / reminders. |
+| `api/share.js`, `share.html`, `share-view.js` | Private share links: create/update (owner) and view-by-token (no login). |
 | `api/send-reminders.js` | Vercel cron (every minute): sends due reminders as Web Push notifications. |
 | `lib/verify-user.js` | Shared Supabase access-token check for the functions above. |
 | `sw.js`, `manifest.webmanifest` | Service worker (receives push) + PWA manifest (lets iPhone install it, which iOS requires for push). |
@@ -76,6 +77,13 @@ the caller's Supabase access token before returning anything. The old public
   **⚙ Auto-group rules** in the sidebar (defaults: "Predictable Profits" for
   *predictable profits* / *ppai*, "Client Calls" for *client call*); every
   existing group name also counts as a keyword for itself.
+- **Share** (on a long note, task, project to-do, or a project's ⋯ menu) makes
+  a private link to a read-only copy of that one item: no login for the
+  recipient, not listed or indexed anywhere, optional passcode and expiry.
+  **Shared links** in the sidebar lists them all; **Update copy** sends your
+  latest edits and **Turn off** deletes the copy. Served by `share.html` +
+  `share-view.js` (at `/s/<token>`) and `api/share.js`. Setup:
+  [`supabase/MIGRATION.md`](supabase/MIGRATION.md#private-share-links-setup).
 - **⌘N / Ctrl+N** starts a new item on any screen: a task on Tasks, a task in
   the open project on Projects, a long note on Long Notes, a message on
   Assistant. (Chrome and Safari keep ⌘N for "New Window" and don't hand it to
