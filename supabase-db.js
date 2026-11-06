@@ -529,6 +529,39 @@
       if (error) throw error;
     },
 
+    /* ---------- Claude to-dos ("From Claude" view) ----------
+       Written by Claude from outside the app (see docs/claude-todos.md).
+       The app only reads them and updates single rows by id; it never
+       reconciles this table, so nothing Claude files can be wiped by a save. */
+
+    _claudeTodoFromRow(r) {
+      return {
+        id: r.id, extKey: r.ext_key || "", list: r.list || "General",
+        source: r.source || "", sourceDate: r.source_date || "",
+        title: r.title || "", why: r.why || "", notes: r.notes || "",
+        status: r.status || "todo", owner: r.owner || "",
+        links: Array.isArray(r.links) ? r.links : [],
+        sortOrder: Number(r.sort_order) || 0,
+        createdAt: r.created_at || "", updatedAt: r.updated_at || "", doneAt: r.done_at || "",
+      };
+    },
+
+    async loadClaudeTodos() {
+      await ensureUser();
+      const { data, error } = await client.from("claude_todos").select("*")
+        .order("source_date", { ascending: false, nullsFirst: false })
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data || []).map((r) => this._claudeTodoFromRow(r));
+    },
+
+    // patch uses column names: { status } or { notes }
+    async updateClaudeTodo(id, patch) {
+      await ensureUser();
+      const { error } = await client.from("claude_todos").update(patch).eq("id", String(id));
+      if (error) throw error;
+    },
+
     /* ---------- SMS reminders (double opt-in; state in app_metadata, written only by the server) ---------- */
 
     // -> { phone, status: "off" | "pending" | "confirmed" | "stopped", requested_at, confirmed_at }

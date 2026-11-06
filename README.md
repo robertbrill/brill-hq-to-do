@@ -84,6 +84,12 @@ the caller's Supabase access token before returning anything. The old public
   latest edits and **Turn off** deletes the copy. Served by `share.html` +
   `share-view.js` (at `/s/<token>`) and `api/share.js`. Setup:
   [`supabase/MIGRATION.md`](supabase/MIGRATION.md#private-share-links-setup).
+- **From Claude** (sidebar → ✨ From Claude): to-do lists Claude files from
+  calls and project threads (first one: the Predictable Profits action items),
+  grouped by list, then by call/source and date. Change an item's status or add
+  a note right there; Claude reads the status back. Stored in its own
+  `claude_todos` table so the app's save can never wipe it. How Claude writes
+  to it: [`docs/claude-todos.md`](docs/claude-todos.md).
 - **⌘N / Ctrl+N** starts a new item on any screen: a task on Tasks, a task in
   the open project on Projects, a long note on Long Notes, a message on
   Assistant. (Chrome and Safari keep ⌘N for "New Window" and don't hand it to

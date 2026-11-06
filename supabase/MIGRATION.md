@@ -195,6 +195,16 @@ How it stays private:
   passcode by a different channel than the link.
 - Files attached to a note or project are **not** included in the share.
 
+## "From Claude" lists setup
+
+1. Re-run `supabase/schema.sql` in the SQL Editor (or apply just its
+   "CLAUDE TO-DOS" section). The new part is the `claude_todos` table, its
+   `updated_at`/`done_at` trigger, and owner-only RLS like everything else.
+2. Redeploy. No env vars: the app reads and updates the table with your own
+   session, and Claude writes to it through the Supabase connector.
+
+What goes in it and how Claude writes to it: [`docs/claude-todos.md`](../docs/claude-todos.md).
+
 ---
 
 ## Local development (optional)

@@ -210,3 +210,58 @@ create policy own_all on shares for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 -- Belt and braces: the anon role gets no table privileges at all (RLS already denies it).
 revoke all on table shares from anon;
+
+-- ============ CLAUDE TO-DOS ("From Claude" view) ============
+-- Action items Claude files from calls, coaching sessions and project threads
+-- (e.g. the running list from Predictable Profits calls). Kept in their own
+-- table ON PURPOSE: BrillDB.saveAll() reconciles projects / project_todos /
+-- notes to exactly what the open app holds, so rows written there from
+-- outside the app get deleted on the next save. The app never reconciles
+-- this table; it only updates single rows (status, notes) by id.
+--
+-- Grouping in the view: list -> source + source_date -> items.
+-- Claude writes with an upsert on (user_id, ext_key), so re-syncing the same
+-- item updates it instead of duplicating it. See docs/claude-todos.md.
+create table if not exists claude_todos (
+  id          text primary key default ('ct_' || replace(gen_random_uuid()::text, '-', '')),
+  user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  ext_key     text not null,                -- stable key Claude upserts by, e.g. 'pp:2026-11-05:cta-price'
+  list        text not null default 'General', -- top-level list, e.g. 'Predictable Profits'
+  source      text default '',              -- where it came from, e.g. 'Group training: Spark magnets'
+  source_date date,                         -- date of that call / session
+  title       text not null,                -- the action, as a short imperative sentence
+  why         text default '',              -- one line on why it matters (context that survives between calls)
+  notes       text default '',              -- longer detail; RB can edit this in the app
+  status      text not null default 'todo', -- todo | in_progress | waiting | done | dropped
+  owner       text default 'RB',            -- who does it: RB, Claude, Lynda, Stephanie...
+  links       jsonb not null default '[]'::jsonb,  -- [{ "label": "...", "url": "https://..." }]
+  sort_order  double precision default 0,   -- order within a source group
+  created_by  text default 'claude',
+  created_at  timestamptz default now(),
+  updated_at  timestamptz default now(),
+  done_at     timestamptz,                  -- stamped by the trigger when status becomes done
+  unique (user_id, ext_key),
+  constraint claude_todos_status_chk check (status in ('todo','in_progress','waiting','done','dropped'))
+);
+create index if not exists claude_todos_user_idx on claude_todos(user_id, list, source_date desc);
+
+-- Keep updated_at / done_at right no matter who writes (the app or Claude).
+create or replace function claude_todos_touch() returns trigger language plpgsql set search_path = public as $$
+begin
+  new.updated_at := now();
+  if new.status = 'done' and (tg_op = 'INSERT' or old.status is distinct from 'done') then
+    new.done_at := coalesce(new.done_at, now());
+  elsif new.status <> 'done' then
+    new.done_at := null;
+  end if;
+  return new;
+end $$;
+drop trigger if exists claude_todos_touch on claude_todos;
+create trigger claude_todos_touch before insert or update on claude_todos
+  for each row execute function claude_todos_touch();
+
+alter table claude_todos enable row level security;
+drop policy if exists own_all on claude_todos;
+create policy own_all on claude_todos for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+revoke all on table claude_todos from anon;
