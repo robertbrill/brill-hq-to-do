@@ -1233,6 +1233,29 @@
   .rem-notes { font-size: 13px; color: var(--muted); margin-top: 3px; white-space: pre-wrap; }
   .rem-actions { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
   .rem-done { margin-top: 10px; }
+  /* From Claude */
+  .ct-controls { justify-content: space-between; gap: 10px; }
+  .ct-lists { display: flex; flex-wrap: wrap; gap: 4px; }
+  .ct-n { font-size: 12px; color: var(--faint); }
+  .ct-right { display: flex; gap: 14px; align-items: center; margin-left: auto; padding-bottom: 6px; }
+  .ct-ctl { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .ct-ctl select { font: inherit; font-size: 13px; border: 1px solid var(--border-strong); border-radius: 6px; padding: 2px 6px; background: transparent; color: var(--text); }
+  .ct-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 6px; border-bottom: 1px solid var(--border); }
+  .ct-row:last-child { border-bottom: none; }
+  .ct-row:hover { background: var(--hover); border-radius: var(--radius); }
+  .ct-row .status-select { margin-top: 1px; }
+  .ct-body { flex: 1; min-width: 0; }
+  .ct-title { font-size: 15px; word-break: break-word; }
+  .ct-row.closed .ct-title { color: var(--faint); text-decoration: line-through; }
+  .ct-why { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .ct-links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 12.5px; }
+  .ct-links a { color: var(--blue); text-decoration: none; }
+  .ct-links a:hover { text-decoration: underline; }
+  .ct-links span { color: var(--muted); }
+  .ct-row .task-meta { margin-top: 4px; flex-wrap: wrap; }
+  .ct-owner { font-weight: 500; color: var(--muted); }
+  .ct-group-list { font-weight: 400; color: var(--faint); margin-left: 6px; }
+  .ct-row .notes-area { margin-top: 6px; }
   .rem-done summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 4px 0; }
   .quick-add input[type="datetime-local"] { border: none; outline: none; font: inherit; font-size: 13px; color: var(--muted); background: transparent; }
 
@@ -1413,6 +1436,9 @@
   <button class="nav-item" id="nav-reminders" data-action="nav" data-view="reminders">
     <span class="nav-icon">&#9200;</span> Reminders <span class="nav-count" id="nav-reminders-count"></span>
   </button>
+  <button class="nav-item" id="nav-claude" data-action="nav" data-view="claude">
+    <span class="nav-icon">&#10024;</span> From Claude <span class="nav-count" id="nav-claude-count"></span>
+  </button>
   <button class="nav-item" id="nav-shares" data-action="share-all">
     <span class="nav-icon">&#128279;</span> Shared links
   </button>
@@ -1548,6 +1574,26 @@
       <button class="add-btn" type="submit">Add</button>
     </form>
     <div id="reminders-list"></div>
+  </div>
+
+  <!-- ============ FROM CLAUDE ============ -->
+  <div class="page" id="page-claude">
+    <div class="page-title">From Claude</div>
+    <div class="page-subtitle" id="claude-subtitle"></div>
+    <div class="controls-row ct-controls">
+      <div class="ct-lists" id="claude-list-tabs"></div>
+      <div class="ct-right">
+        <label class="ct-ctl">Group by
+          <select id="claude-group-by">
+            <option value="source">Call / source</option>
+            <option value="status">Status</option>
+            <option value="owner">Owner</option>
+          </select>
+        </label>
+        <label class="ct-ctl"><input type="checkbox" id="claude-show-done"> Show done</label>
+      </div>
+    </div>
+    <div id="claude-todos"></div>
   </div>
 
 </main>
@@ -1759,7 +1805,7 @@ function setCompactList(show) {
 }
 
 function updateCompactBar() {
-  const labels = { tasks: "Tasks", projects: "Projects", personal: "Long Notes", files: "Files", assistant: "Assistant", reminders: "Reminders" };
+  const labels = { tasks: "Tasks", projects: "Projects", personal: "Long Notes", files: "Files", assistant: "Assistant", reminders: "Reminders", claude: "From Claude" };
   document.getElementById("compact-title").textContent = labels[view] || "";
   const listBtn = document.getElementById("compact-list-toggle");
   const newBtn = document.getElementById("compact-new");
@@ -1966,6 +2012,7 @@ function flushSave() {
 }
 
 window.addEventListener("pagehide", flushSave);
+window.addEventListener("pagehide", () => Object.keys(claudeNoteTimers).forEach(flushClaudeNote));
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushSave();
 });
@@ -2083,6 +2130,7 @@ function renderNav() {
   document.getElementById("nav-personal-count").textContent = personalItems.filter(i => !i.archived).length;
   const pendingCount = pendingReminders().length + deliveredReminders().length;
   document.getElementById("nav-reminders-count").textContent = pendingCount || "";
+  document.getElementById("nav-claude-count").textContent = claudeOpenCount() || "";
   renderNoteGroupsNav();   // show the group list under Long Notes (hidden in other views)
   updateCompactBar();
   document.getElementById("sidebar-stats").textContent = `${total - done} open · ${done} done`;
@@ -2103,6 +2151,7 @@ function setView(next) {
   document.getElementById("page-files").classList.toggle("visible", view === "files");
   document.getElementById("page-assistant").classList.toggle("visible", view === "assistant");
   document.getElementById("page-reminders").classList.toggle("visible", view === "reminders");
+  document.getElementById("page-claude").classList.toggle("visible", view === "claude");
   try {
     localStorage.setItem(UI_VIEW_KEY, view);
     if (view === "projects" && activeProjectId) localStorage.setItem(UI_PROJECT_KEY, activeProjectId);
@@ -2180,7 +2229,7 @@ function deleteBarHtml() {
 function keepCaretThrough(rerender) {
   const el = document.activeElement;
   const role = el && el.dataset && el.dataset.role;
-  const keep = (role === "task-notes" || role === "ptodo-notes")
+  const keep = (role === "task-notes" || role === "ptodo-notes" || role === "claude-notes")
     ? { role, key: el.dataset.key || "", id: el.dataset.id || "",
         start: el.selectionStart, end: el.selectionEnd, scroll: el.scrollTop }
     : null;
@@ -3417,6 +3466,7 @@ function render() {
   if (view === "files") renderFilesView();
   if (view === "assistant") renderAssistant();
   if (view === "reminders") renderReminders();
+  if (view === "claude") renderClaudeTodos();
 }
 
 /* ---------- task status ---------- */
@@ -3835,6 +3885,8 @@ document.addEventListener("click", e => {
   if (a === "reminder-done") markReminderDone(el.dataset.id);
   if (a === "reminder-snooze") snoozeReminder(el.dataset.id, 60);
   if (a === "reminder-delete") deleteReminder(el.dataset.id);
+  if (a === "claude-list") { claudeListFilter = el.dataset.list; saveClaudeUi(); renderClaudeTodos(); }
+  if (a === "claude-notes") toggleClaudeNotes(el.dataset.id);
   if (a === "push-enable") enablePush();
   if (a === "sms-stop") smsStop();
   if (a === "sms-resend") smsResend();
@@ -4185,6 +4237,7 @@ document.addEventListener("input", e => {
     else delete notes[el.dataset.key];
     queueSave();
   }
+  if (el.dataset.role === "claude-notes") queueClaudeNote(el.dataset.id, el.value);
   if (el.dataset.role === "ptodo-notes") {
     const p = findProject(activeProjectId);
     const t = p && p.todos.find(t => String(t.id) === String(el.dataset.id));
@@ -4276,6 +4329,9 @@ document.addEventListener("change", e => {
   }
   if (el.dataset.role === "task-status") setTaskStatus(el.dataset.key, el.value);
   if (el.dataset.role === "ptodo-status") setPtodoStatus(el.dataset.id, el.value);
+  if (el.dataset.role === "claude-status") setClaudeStatus(el.dataset.id, el.value);
+  if (el.id === "claude-group-by") { claudeGroupBy = el.value; saveClaudeUi(); renderClaudeTodos(); }
+  if (el.id === "claude-show-done") { claudeShowDone = el.checked; saveClaudeUi(); renderClaudeTodos(); }
   if (el.id === "detail-status") {
     const p = findProject(activeProjectId);
     if (p) { p.status = el.value; touchProject(p); queueSave(); renderProjectDetail(); renderProjectsSidebar(); renderNav(); }
@@ -4348,6 +4404,7 @@ document.addEventListener("focusout", e => {
   if (e.target.id === "edit-input" && editingTaskKey) saveTaskEdit(e.target);
   if (e.target.id === "ptodo-edit-input" && editingPtodoId !== null) savePtodoEdit(e.target);
   const role = e.target.dataset && e.target.dataset.role;
+  if (role === "claude-notes" && claudeNoteTimers[e.target.dataset.id]) flushClaudeNote(e.target.dataset.id);
   if ((role === "entry-title" || role === "entry-body") && autoGroupRefreshPending) {
     // wait a tick: if focus is just moving to the group box or toolbar, the pane must stay put
     setTimeout(() => { if (!isTypingInEntryDetail(document.getElementById("entry-detail"))) flushAutoGroupRefresh(); }, 0);
@@ -4445,7 +4502,7 @@ window.addEventListener("drop", e => { if (dragHasFiles(e)) e.preventDefault(); 
 /* ---------- init ---------- */
 
 async function init() {
-  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks(), loadReminders(), refreshPushDevices(), loadSmsState()]);
+  await Promise.all([loadRemoteState(), loadInbox(), loadBaseTasks(), loadReminders(), loadClaudeTodos(), refreshPushDevices(), loadSmsState()]);
   await detectPushState();
   routeInboxItems();
   // give every note a stable id so files can attach to it across sessions;
@@ -4470,7 +4527,7 @@ async function init() {
   if (lastView === "projects" || lastView === "detail") {
     if (lastProject && findProject(lastProject)) activeProjectId = lastProject;
     setView("projects");
-  } else if (["personal", "files", "assistant", "reminders"].includes(lastView)) {
+  } else if (["personal", "files", "assistant", "reminders", "claude"].includes(lastView)) {
     setView(lastView);
   } else {
     setView("tasks");
@@ -4853,6 +4910,210 @@ function renderReminders() {
     (done.length ? `<details class="rem-done"><summary>Done (${done.length})</summary>${done.slice(0, 40).map(r => row(r, "done")).join("")}</details>` : "");
 }
 
+/* ---------- From Claude (action items Claude files from calls and threads) ----------
+   Rows live in their own claude_todos table, written by Claude from outside
+   the app (docs/claude-todos.md). Here they are only read, and updated one
+   row at a time (status, notes); saveAll() never touches them. */
+
+const CLAUDE_STATUSES = [
+  { id: "todo",        label: "To do",       pill: "pill-gray" },
+  { id: "in_progress", label: "In progress", pill: "pill-blue" },
+  { id: "waiting",     label: "Waiting",     pill: "pill-purple" },
+  { id: "done",        label: "Done",        pill: "pill-green" },
+  { id: "dropped",     label: "Dropped",     pill: "pill-red" }
+];
+const CLAUDE_UI_KEY = "v2-claude-ui";
+let claudeTodos = [];
+let claudeTodosLoaded = false;        // false until the table answered once (missing table = never)
+let claudeListFilter = "__all__";
+let claudeGroupBy = "source";         // source | status | owner
+let claudeShowDone = false;
+const claudeNotesOpen = new Set();
+const claudeNoteTimers = {};
+try {
+  const ui = JSON.parse(localStorage.getItem(CLAUDE_UI_KEY)) || {};
+  if (ui.list) claudeListFilter = ui.list;
+  if (["source", "status", "owner"].includes(ui.groupBy)) claudeGroupBy = ui.groupBy;
+  claudeShowDone = !!ui.showDone;
+} catch (e) {}
+
+function saveClaudeUi() {
+  try { localStorage.setItem(CLAUDE_UI_KEY, JSON.stringify({ list: claudeListFilter, groupBy: claudeGroupBy, showDone: claudeShowDone })); } catch (e) {}
+}
+
+async function loadClaudeTodos() {
+  try {
+    const rows = await BrillDB.loadClaudeTodos();
+    // keep a note that's mid-save from being overwritten by an older copy
+    claudeTodos = rows.map(r => {
+      if (!claudeNoteTimers[r.id]) return r;
+      const mine = claudeTodos.find(x => x.id === r.id);
+      return mine ? { ...r, notes: mine.notes } : r;
+    });
+    claudeTodosLoaded = true;
+  } catch (e) { /* table not created yet, or offline: keep what we have */ }
+}
+
+const isClaudeClosed = t => t.status === "done" || t.status === "dropped";
+function claudeOpenCount() { return claudeTodos.filter(t => !isClaudeClosed(t)).length; }
+function claudeEditing() {
+  const el = document.activeElement;
+  return !!(el && el.dataset && el.dataset.role === "claude-notes");
+}
+
+function fmtSourceDate(d) {
+  if (!d) return "";
+  const dt = new Date(d + "T12:00:00");   // a date column: pin to midday so no timezone shifts the day
+  if (Number.isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function safeHttpUrl(u) {
+  try { const x = new URL(String(u)); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; }
+  catch (e) { return ""; }
+}
+
+function claudeRowHtml(t, showList) {
+  const cur = CLAUDE_STATUSES.find(s => s.id === t.status) || CLAUDE_STATUSES[0];
+  const notesOpen = claudeNotesOpen.has(t.id);
+  const hasNotes = !!(t.notes || "").trim();
+  const links = (t.links || []).map(l => {
+    const label = escHtml((l && (l.label || l.url)) || "");
+    const href = safeHttpUrl(l && l.url);
+    return href ? `<a href="${escHtml(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+                : `<span title="${escHtml((l && l.url) || "")}">${label}</span>`;   // e.g. a NAS path: show, don't link
+  }).filter(Boolean);
+  const meta = [];
+  if (t.owner) meta.push(`<span class="ct-owner">${escHtml(t.owner)}</span>`);
+  if (showList) meta.push(`<span class="task-section-tag">${escHtml(t.list)}</span>`);
+  if (claudeGroupBy !== "source" && (t.source || t.sourceDate))
+    meta.push(`<span>${escHtml([fmtSourceDate(t.sourceDate), t.source].filter(Boolean).join(" · "))}</span>`);
+  if (t.status === "done" && t.doneAt) meta.push(`<span>Done ${escHtml(new Date(t.doneAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }))}</span>`);
+  if (hasNotes && !notesOpen) meta.push(`<span class="note-preview">&#128221; ${escHtml(t.notes.split("\n")[0].slice(0, 80))}</span>`);
+  return `<div class="ct-row ${isClaudeClosed(t) ? "closed" : ""}" data-id="${escHtml(t.id)}">
+    <select class="pill clickable status-select ${cur.pill}" title="Status" data-role="claude-status" data-id="${escHtml(t.id)}">
+      ${CLAUDE_STATUSES.map(s => `<option value="${s.id}"${s.id === cur.id ? " selected" : ""}>${s.label}</option>`).join("")}
+    </select>
+    <div class="ct-body">
+      <div class="ct-title">${escHtml(t.title)}</div>
+      ${t.why ? `<div class="ct-why">${escHtml(t.why)}</div>` : ""}
+      ${links.length ? `<div class="ct-links">${links.join("")}</div>` : ""}
+      ${meta.length ? `<div class="task-meta">${meta.join("")}</div>` : ""}
+      ${notesOpen ? `<textarea class="notes-area" data-role="claude-notes" data-id="${escHtml(t.id)}" placeholder="Notes&hellip;">${escHtml(t.notes || "")}</textarea>` : ""}
+    </div>
+    <div class="rem-actions">
+      <button class="icon-btn" data-action="claude-notes" data-id="${escHtml(t.id)}">${notesOpen ? "Hide" : (hasNotes ? "Note" : "+ Note")}</button>
+    </div>
+  </div>`;
+}
+
+function claudeGroups(items) {
+  const groups = new Map();
+  const add = (key, title, sortKey, item) => {
+    if (!groups.has(key)) groups.set(key, { title, sortKey, items: [] });
+    groups.get(key).items.push(item);
+  };
+  items.forEach(t => {
+    if (claudeGroupBy === "status") {
+      const i = CLAUDE_STATUSES.findIndex(s => s.id === t.status);
+      // working order: what's moving, then what's blocked, then the backlog
+      const order = { in_progress: 0, waiting: 1, todo: 2, done: 3, dropped: 4 }[t.status] ?? 2;
+      add(t.status, (CLAUDE_STATUSES[i] || CLAUDE_STATUSES[0]).label, String(order), t);
+    } else if (claudeGroupBy === "owner") {
+      const o = t.owner || "Unassigned";
+      add(o.toLowerCase(), o, o.toLowerCase(), t);
+    } else {
+      const title = [fmtSourceDate(t.sourceDate), t.source].filter(Boolean).join(" · ") || "Other";
+      // newest call first; undated sources sink to the bottom
+      add((t.sourceDate || "") + "|" + t.source, title, (t.sourceDate ? "0" + (99999999 - Number(t.sourceDate.replace(/-/g, ""))) : "1") + t.source, t);
+    }
+  });
+  return [...groups.values()].sort((a, b) => a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0);
+}
+
+function renderClaudeTodos() { keepCaretThrough(renderClaudeTodosInner); }
+
+function renderClaudeTodosInner() {
+  const box = document.getElementById("claude-todos");
+  const lists = [...new Set(claudeTodos.map(t => t.list))].sort();
+  if (claudeListFilter !== "__all__" && !lists.includes(claudeListFilter)) claudeListFilter = "__all__";
+  const inList = claudeTodos.filter(t => claudeListFilter === "__all__" || t.list === claudeListFilter);
+  const open = inList.filter(t => !isClaudeClosed(t));
+  const waiting = open.filter(t => t.status === "waiting").length;
+  const doneCount = inList.length - open.length;
+  document.getElementById("claude-subtitle").textContent = claudeTodosLoaded
+    ? `${open.length} open${waiting ? ` · ${waiting} waiting` : ""} · ${doneCount} done or dropped`
+    : "";
+  document.getElementById("claude-list-tabs").innerHTML = lists.length > 1
+    ? [["__all__", "All"], ...lists.map(l => [l, l])].map(([id, label]) => {
+        const n = claudeTodos.filter(t => (id === "__all__" || t.list === id) && !isClaudeClosed(t)).length;
+        return `<button class="tab ${claudeListFilter === id ? "current" : ""}" data-action="claude-list" data-list="${escHtml(id)}">${escHtml(label)} <span class="ct-n">${n}</span></button>`;
+      }).join("")
+    : "";
+  document.getElementById("claude-group-by").value = claudeGroupBy;
+  document.getElementById("claude-show-done").checked = claudeShowDone;
+
+  if (!claudeTodosLoaded) {
+    box.innerHTML = `<div class="empty-note">Claude's lists aren't set up yet. Run the claude_todos section of supabase/schema.sql.</div>`;
+    return;
+  }
+  const shown = claudeShowDone ? inList : open;
+  if (!shown.length) {
+    box.innerHTML = `<div class="empty-note">${inList.length ? "Everything here is done. Tick “Show done” to see it." : "Nothing from Claude yet. Action items from calls and threads land here."}</div>`;
+    return;
+  }
+  const showList = claudeListFilter === "__all__" && lists.length > 1 && claudeGroupBy !== "source";
+  box.innerHTML = claudeGroups(shown).map(g => {
+    const items = g.items.slice().sort((a, b) =>
+      claudeGroupBy === "source"
+        ? (isClaudeClosed(a) - isClaudeClosed(b)) || (a.sortOrder - b.sortOrder)
+        : (b.sourceDate || "").localeCompare(a.sourceDate || "") || (a.sortOrder - b.sortOrder));
+    const openN = items.filter(t => !isClaudeClosed(t)).length;
+    const listTag = claudeGroupBy === "source" && claudeListFilter === "__all__" && lists.length > 1
+      ? ` <span class="ct-group-list">${escHtml(items[0].list)}</span>` : "";
+    return `<div class="rem-section ct-group">
+      <div class="rem-section-title">${escHtml(g.title)}${listTag} <span>${openN === 0 ? items.length : openN}${openN && openN !== items.length ? ` open of ${items.length}` : ""}</span></div>
+      ${items.map(t => claudeRowHtml(t, showList)).join("")}
+    </div>`;
+  }).join("");
+}
+
+async function setClaudeStatus(id, status) {
+  const t = claudeTodos.find(x => x.id === id);
+  if (!t || !CLAUDE_STATUSES.some(s => s.id === status)) return;
+  const prev = t.status;
+  t.status = status;
+  if (status === "done") t.doneAt = new Date().toISOString();
+  renderClaudeTodos(); renderNav();
+  if (isClaudeClosed(t) && !claudeShowDone) showToast(status === "done" ? "Marked done" : "Dropped");
+  try { await BrillDB.updateClaudeTodo(id, { status }); }
+  catch (e) { t.status = prev; renderClaudeTodos(); renderNav(); showToast("Couldn't save — check your connection"); }
+}
+
+function toggleClaudeNotes(id) {
+  if (claudeNotesOpen.has(id)) claudeNotesOpen.delete(id); else claudeNotesOpen.add(id);
+  renderClaudeTodos();
+  if (claudeNotesOpen.has(id)) {
+    const ta = document.querySelector('[data-role="claude-notes"][data-id="' + CSS.escape(id) + '"]');
+    if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }
+}
+
+function flushClaudeNote(id) {
+  clearTimeout(claudeNoteTimers[id]);
+  delete claudeNoteTimers[id];
+  const t = claudeTodos.find(x => x.id === id);
+  if (t) BrillDB.updateClaudeTodo(id, { notes: t.notes }).catch(() => showToast("Couldn't save the note — check your connection"));
+}
+
+function queueClaudeNote(id, value) {
+  const t = claudeTodos.find(x => x.id === id);
+  if (!t) return;
+  t.notes = value;
+  clearTimeout(claudeNoteTimers[id]);
+  claudeNoteTimers[id] = setTimeout(() => flushClaudeNote(id), 800);
+}
+
 /* ---------- assistant (chat intake) ---------- */
 
 const CHAT_KEY = "v2-assistant-chat";
@@ -5187,6 +5448,9 @@ function startPolling() {
     if (smsState.status === "pending") await loadSmsState();   // picks up the YES reply
     await checkDueReminders();
     if (view === "reminders") renderReminders();
+    // Claude files items from outside the app; pick them up on the same beat
+    await loadClaudeTodos();
+    if (view === "claude" && !claudeEditing()) renderClaudeTodos();
     renderNav();
   }, REMINDER_POLL_MS);
   // keep this device in sync with any other computer editing the same data
