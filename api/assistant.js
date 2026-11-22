@@ -15,10 +15,13 @@
  *   ANTHROPIC_API_KEY   required — the assistant is disabled (503) without it
  *   ASSISTANT_MODEL     optional — defaults to claude-opus-5
  *   SUPABASE_URL / SUPABASE_ANON_KEY — already set; used to verify the caller
+ *   AI_GATEWAY_URL + AI_GATEWAY_TOKEN — optional; route Claude calls through
+ *                       the Cloudflare AI Gateway (see lib/ai-gateway.js)
  */
 
 const Anthropic = require("@anthropic-ai/sdk");
 const { verifyUser, jsonBody } = require("../lib/verify-user");
+const { anthropicGateway } = require("../lib/ai-gateway");
 
 const MODEL = process.env.ASSISTANT_MODEL || "claude-opus-5";
 const MAX_HISTORY = 24;       // turns of chat history we replay
@@ -188,7 +191,7 @@ module.exports = async (req, res) => {
   const messages = sanitizeMessages(body.messages);
   if (!messages.length) { res.status(400).json({ error: "empty_message" }); return; }
 
-  const client = new Anthropic({ maxRetries: 2, timeout: 55000 });
+  const client = new Anthropic({ maxRetries: 2, timeout: 55000, ...anthropicGateway("hq-to-do") });
 
   let response;
   try {
